@@ -13,6 +13,7 @@ import com.google.android.gms.location.*
 class RouteTrackingService : Service() {
     private lateinit var client: FusedLocationProviderClient
     private var callback: LocationCallback? = null
+    private var lastSaved: android.location.Location? = null
     override fun onCreate() {
         super.onCreate()
         client = LocationServices.getFusedLocationProviderClient(this)
@@ -25,10 +26,26 @@ class RouteTrackingService : Service() {
         else Notification.Builder(this).setContentTitle("Doprava").setContentText("Zaznamenávám trasu jízdy").setSmallIcon(android.R.drawable.ic_menu_mylocation).build()
         startForeground(21, notification)
         if (id > 0 && callback == null) {
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 15000).setMinUpdateDistanceMeters(30f).build()
+            val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 20000).setMinUpdateDistanceMeters(40f).build()
             callback = object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
-                    result.locations.forEach { Database(this@RouteTrackingService).addRoutePoint(id,it.latitude,it.longitude) }
+                    result.locations.forEach { location ->
+                        // Ignore poor fixes and stationary GPS drift to save battery and keep distance realistic.
+                        if (location.accuracy > 60f) return@forEach
+                        val previous = lastSaved
+                        if (previous == null) {
+                            Database(this@RouteTrackingService).addRoutePoint(id, location.latitude, location.longitude, location.time)
+                            lastSaved = location
+                        } else {
+                            val distance = previous.distanceTo(location)
+                            val elapsed = (location.time - previous.time).coerceAtLeast(1L) / 1000f
+                            val speed = distance / elapsed
+                            if (distance >= 35f && speed <= 50f) {
+                                Database(this@RouteTrackingService).addRoutePoint(id, location.latitude, location.longitude, location.time)
+                                lastSaved = location
+                            }
+                        }
+                    }
                 }
             }
             try { client.requestLocationUpdates(request, callback!!, mainLooper) } catch (_: SecurityException) { stopSelf() }
