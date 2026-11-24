@@ -31,6 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import java.text.SimpleDateFormat
@@ -192,7 +193,7 @@ class MainActivity : ComponentActivity() {
                             Text("DOPRAVA", style = MaterialTheme.typography.headlineMedium,
                                 color = Color.White)
                             Text("EVIDENCE JÍZD A ČINNOSTÍ", style = MaterialTheme.typography.labelSmall,
-                                color = gold, letterSpacing = androidx.compose.ui.unit.sp(1.4f))
+                                color = gold, letterSpacing = 1.4.sp)
                             Box(Modifier.padding(top = 5.dp).width(104.dp).height(3.dp)
                                 .background(gold, RoundedCornerShape(50)))
                         }
