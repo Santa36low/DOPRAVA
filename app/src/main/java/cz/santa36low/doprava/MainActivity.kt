@@ -13,6 +13,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Coffee
+import androidx.compose.material.icons.filled.Construction
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,11 +41,11 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun DopravaScreen() {
         val activities = listOf(
-            "Jízda" to "🚛",
-            "Nákladka" to "📦",
-            "Výkladka" to "🏗️",
-            "Pauza" to "☕",
-            "Cesta domů" to "🏠"
+            "Jízda" to Icons.Filled.LocalShipping,
+            "Nákladka" to Icons.Filled.Inventory2,
+            "Výkladka" to Icons.Filled.Construction,
+            "Pauza" to Icons.Filled.Coffee,
+            "Cesta domů" to Icons.Filled.Home
         )
         var active by remember { mutableStateOf(db.active()) }
         var history by remember { mutableStateOf(db.history()) }
@@ -131,7 +138,18 @@ class MainActivity : ComponentActivity() {
                 Modifier.fillMaxSize().padding(padding).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("DOPRAVA", style = MaterialTheme.typography.headlineLarge)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(Icons.Filled.LocalShipping, contentDescription = "Logo Doprava",
+                        tint = Color(0xFF0B3A66), modifier = Modifier.size(42.dp))
+                    Column {
+                        Text("DOPRAVA", style = MaterialTheme.typography.headlineLarge, color = Color(0xFF0B2B4D))
+                        Text("Evidence jízd a činností", style = MaterialTheme.typography.labelMedium, color = Color(0xFFB47B00))
+                    }
+                }
 
                 if (page == 0) {
                     Text("Vyber činnost", style = MaterialTheme.typography.titleLarge)
@@ -151,7 +169,7 @@ class MainActivity : ComponentActivity() {
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                Text(emoji, style = MaterialTheme.typography.headlineMedium)
+                                Icon(emoji, contentDescription = name, tint = Color(0xFF0B4A78), modifier = Modifier.size(34.dp))
                                 Text(name, style = MaterialTheme.typography.titleMedium)
                                 Spacer(Modifier.weight(1f))
                                 if (active?.type == name) Text("Probíhá", color = MaterialTheme.colorScheme.primary)
@@ -175,7 +193,7 @@ class MainActivity : ComponentActivity() {
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text(activities.firstOrNull { it.first == active!!.type }?.second ?: "⏱️", style = MaterialTheme.typography.headlineLarge)
+                                    Icon(activities.firstOrNull { it.first == active!!.type }?.second ?: Icons.Filled.LocalShipping, contentDescription = active!!.type, tint = Color(0xFF0B4A78), modifier = Modifier.size(38.dp))
                                     Text(active!!.type, style = MaterialTheme.typography.headlineMedium)
                                 }
                                 Text("Datum: ${dateOnly(active!!.start)}")
@@ -221,11 +239,11 @@ class MainActivity : ComponentActivity() {
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(history) { item ->
-                                val emoji = activities.firstOrNull { it.first == item.type }?.second ?: "⏱️"
+                                val emoji = activities.firstOrNull { it.first == item.type }?.second ?: Icons.Filled.LocalShipping
                                 Card(Modifier.fillMaxWidth()) {
                                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            Text(emoji, style = MaterialTheme.typography.titleLarge)
+                                            Icon(emoji, contentDescription = item.type, tint = Color(0xFF0B4A78), modifier = Modifier.size(28.dp))
                                             Text(item.type, style = MaterialTheme.typography.titleMedium)
                                         }
                                         Text("Datum: ${dateOnly(item.start)}")
