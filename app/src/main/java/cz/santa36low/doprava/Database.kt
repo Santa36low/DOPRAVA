@@ -24,6 +24,7 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         db.execSQL("CREATE TABLE fuel(id INTEGER PRIMARY KEY AUTOINCREMENT, liters REAL NOT NULL, time INTEGER NOT NULL, lat REAL, lon REAL)")
         db.execSQL("CREATE TABLE route_points(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, time INTEGER NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL)")
         db.execSQL("CREATE TABLE pauses(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_route_activity_time ON route_points(activity_id, time)")
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) db.execSQL("CREATE TABLE IF NOT EXISTS pauses(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER)")
