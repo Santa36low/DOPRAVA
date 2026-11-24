@@ -284,7 +284,7 @@ class MainActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (page == 0) {
-                        activities.chunked(2).forEach { pair ->
+                        (activities + if (active != null) listOf("Pauza" to Icons.Filled.Coffee) else emptyList()).chunked(2).forEach { pair ->
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -293,7 +293,16 @@ class MainActivity : ComponentActivity() {
                                     val chosen = active?.type == name || (active == null && selectedType == name)
                                     Card(
                                         modifier = Modifier.weight(1f).height(94.dp).clickable {
-                                            if (active == null) selectedType = name
+                                            if (name == "Pauza" && active != null) {
+                                                if (pause == null) {
+                                                    db.startPause(active!!.id)
+                                                    if (active!!.type == "Jízda") stopService(Intent(this@MainActivity, RouteTrackingService::class.java))
+                                                } else {
+                                                    db.finishPause()
+                                                    if (active!!.type == "Jízda" && hasLocation()) ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, RouteTrackingService::class.java).putExtra("activity_id", active!!.id))
+                                                }
+                                                refresh()
+                                            } else if (active == null && name != "Pauza") selectedType = name
                                         },
                                         shape = RoundedCornerShape(19.dp),
                                         border = androidx.compose.foundation.BorderStroke(
@@ -316,8 +325,7 @@ class MainActivity : ComponentActivity() {
                                             Text(name, style = MaterialTheme.typography.titleMedium, color = Color(0xFF101827))
                                             if (active?.type == name) Text("PROBÍHÁ", color = blue,
                                                 style = MaterialTheme.typography.labelSmall)
-                                            else if (active == null && selectedType == name) Text("VYBRÁNO",
-                                                color = blue, style = MaterialTheme.typography.labelSmall)
+                                            
                                         }
                                     }
                                 }
@@ -334,8 +342,6 @@ class MainActivity : ComponentActivity() {
                                 Column(Modifier.fillMaxWidth().padding(18.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("Připraveno ke startu", color = navy,
-                                        style = MaterialTheme.typography.titleMedium)
                                     Text(selectedType, color = blue, style = MaterialTheme.typography.headlineSmall)
                                     Button(
                                         onClick = { startSelected() },
@@ -343,6 +349,8 @@ class MainActivity : ComponentActivity() {
                                         shape = RoundedCornerShape(14.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = blue)
                                     ) { Text("▶  START", style = MaterialTheme.typography.titleLarge) }
+                                    Text("Připraveno ke startu", color = navy,
+                                        style = MaterialTheme.typography.titleMedium)
                                 }
                             }
                         } else {
@@ -355,34 +363,30 @@ class MainActivity : ComponentActivity() {
                                 elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
                             ) {
                                 Column(Modifier.fillMaxWidth()) {
-                                    Box(Modifier.fillMaxWidth().background(navy).padding(14.dp)) {
+                                    Box(Modifier.fillMaxWidth().background(navy).padding(14.dp), contentAlignment = Alignment.Center) {
                                         Text("AKTUÁLNÍ ČINNOST", color = Color.White,
                                             style = MaterialTheme.typography.titleLarge)
                                     }
-                                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
                                         Icon(activities.firstOrNull { it.first == current.type }?.second ?: Icons.Filled.LocalShipping,
                                             contentDescription = current.type, tint = blue, modifier = Modifier.size(48.dp))
                                         Text(current.type, style = MaterialTheme.typography.headlineSmall, color = navy)
                                         Text("TRVÁNÍ", color = blue, style = MaterialTheme.typography.labelLarge)
                                         Text(formatDuration((duration - db.pauseDurationMillis(current.id)).coerceAtLeast(0)), style = MaterialTheme.typography.headlineLarge, color = navy)
-                                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            Text("Datum: ${dateOnly(current.start)}")
-                                            Text("Začátek: ${timeOnly(current.start)}")
-                                            if (current.type != "Pauza") Text("GPS začátku: ${coordinates(current.startLat, current.startLon)}")
-                                            current.startPlace?.let { Text("Místo: $it") }
-                                        }
-                                        if (pause == null) {
-                                            OutlinedButton(onClick = { db.startPause(current.id); if (current.type == "Jízda") stopService(Intent(this@MainActivity, RouteTrackingService::class.java)); refresh() },
-                                                modifier = Modifier.fillMaxWidth().height(44.dp)) { Text("☕  ZAHÁJIT PAUZU") }
-                                        } else {
-                                            Text("PAUZA PROBÍHÁ", color = Color(0xFFB47B00), style = MaterialTheme.typography.titleMedium)
-                                            Text(formatDuration(tick - pause!!.second), style = MaterialTheme.typography.headlineSmall, color = navy)
-                                            Button(onClick = { db.finishPause(); if (current.type == "Jízda" && hasLocation()) ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, RouteTrackingService::class.java).putExtra("activity_id", current.id)); refresh() },
-                                                modifier = Modifier.fillMaxWidth().height(44.dp),
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB47B00))) { Text("UKONČIT PAUZU") }
+                                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text("Datum: ${dateOnly(current.start)}", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                            Text("Začátek: ${timeOnly(current.start)}", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                            if (current.type != "Pauza") Text("GPS začátku: ${coordinates(current.startLat, current.startLon)}", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                            current.startPlace?.let { Text("Místo: $it", textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                                            db.latestPause(current.id)?.let { last ->
+                                                Text("Začátek pauzy: ${timeOnly(last.first)}", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                                last.second?.let { Text("Konec pauzy: ${timeOnly(it)}", textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                                            }
+                                            if (pause != null) Text("PAUZA PROBÍHÁ · ${formatDuration(tick - pause!!.second)}", color = Color(0xFFB47B00), style = MaterialTheme.typography.titleMedium)
                                         }
                                         Button(
-                                            onClick = { if (pause != null) db.finishPause(); finishActive() },
+                                            onClick = { finishActive() },
+                                            enabled = pause == null,
                                             modifier = Modifier.fillMaxWidth().height(58.dp),
                                             shape = RoundedCornerShape(14.dp),
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC92D35))
@@ -433,14 +437,16 @@ class MainActivity : ComponentActivity() {
                                             Icon(itemIcon, contentDescription = item.type, tint = blue, modifier = Modifier.size(30.dp))
                                             Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
                                         }
-                                        Text("Datum: ${dateOnly(item.start)}")
-                                        Text("Začátek: ${timeOnly(item.start)}")
-                                        Text("Konec: ${item.end?.let { timeOnly(it) } ?: "Právě probíhá"}")
-                                        Text("GPS začátku: ${coordinates(item.startLat, item.startLon)}")
-                                        item.startPlace?.let { Text("Místo začátku: $it") }
-                                        Text("GPS konce: ${coordinates(item.endLat, item.endLon)}")
-                                        item.endPlace?.let { Text("Místo konce: $it") }
-                                        Text("Trvání: ${item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id))}")
+                                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            Text("Datum: ${dateOnly(item.start)}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                            Text("Začátek: ${timeOnly(item.start)}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                            Text("Konec: ${item.end?.let { timeOnly(it) } ?: "Právě probíhá"}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                            Text("GPS začátku: ${coordinates(item.startLat, item.startLon)}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                            item.startPlace?.let { Text("Místo začátku: $it", textAlign = androidx.compose.ui.text.style.TextAlign.End) }
+                                            Text("GPS konce: ${coordinates(item.endLat, item.endLon)}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                            item.endPlace?.let { Text("Místo konce: $it", textAlign = androidx.compose.ui.text.style.TextAlign.End) }
+                                            Text("Trvání: ${item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id))}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                        }
                                         if (item.type == "Jízda") {
                                             val kilometers = db.routeDistanceKm(item.id)
                                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
