@@ -80,6 +80,11 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         writableDatabase.insert("pauses", null, v)
     }
 
+    fun pauseDurationMillis(activityId: Long): Long = readableDatabase.rawQuery(
+        "SELECT COALESCE(SUM(COALESCE(end_time, ?) - start_time), 0) FROM pauses WHERE activity_id=?",
+        arrayOf(System.currentTimeMillis().toString(), activityId.toString())
+    ).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+
     fun finishPause() {
         val v = ContentValues().apply { put("end_time", System.currentTimeMillis()) }
         writableDatabase.update("pauses", v, "end_time IS NULL", null)
