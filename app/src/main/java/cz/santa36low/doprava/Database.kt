@@ -14,13 +14,15 @@ data class ActivityRecord(
     val startLat: Double? = null,
     val startLon: Double? = null,
     val endLat: Double? = null,
-    val endLon: Double? = null
+    val endLon: Double? = null,
+    val startPlace: String? = null,
+    val endPlace: String? = null
 )
 data class FuelRecord(val id: Long, val liters: Double, val time: Long, val latitude: Double?, val longitude: Double?)
 
-class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null, 3) {
+class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null, 4) {
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE activities(id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER, start_lat REAL, start_lon REAL, end_lat REAL, end_lon REAL, note TEXT DEFAULT '')")
+        db.execSQL("CREATE TABLE activities(id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER, start_lat REAL, start_lon REAL, end_lat REAL, end_lon REAL, start_place TEXT, end_place TEXT, note TEXT DEFAULT '')")
         db.execSQL("CREATE TABLE fuel(id INTEGER PRIMARY KEY AUTOINCREMENT, liters REAL NOT NULL, time INTEGER NOT NULL, lat REAL, lon REAL)")
         db.execSQL("CREATE TABLE route_points(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, time INTEGER NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL)")
         db.execSQL("CREATE TABLE pauses(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER)")
@@ -29,6 +31,10 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) db.execSQL("CREATE TABLE IF NOT EXISTS pauses(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER)")
         if (oldVersion < 3) db.execSQL("CREATE INDEX IF NOT EXISTS idx_route_activity_time ON route_points(activity_id, time)")
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE activities ADD COLUMN start_place TEXT")
+            db.execSQL("ALTER TABLE activities ADD COLUMN end_place TEXT")
+        }
     }
 
     private fun readActivity(c: android.database.Cursor) = ActivityRecord(
@@ -40,27 +46,31 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         startLat = if (c.isNull(5)) null else c.getDouble(5),
         startLon = if (c.isNull(6)) null else c.getDouble(6),
         endLat = if (c.isNull(7)) null else c.getDouble(7),
-        endLon = if (c.isNull(8)) null else c.getDouble(8)
+        endLon = if (c.isNull(8)) null else c.getDouble(8),
+        startPlace = if (c.isNull(9)) null else c.getString(9),
+        endPlace = if (c.isNull(10)) null else c.getString(10)
     )
 
     fun active(): ActivityRecord? = readableDatabase.rawQuery(
-        "SELECT id,type,start_time,end_time,note,start_lat,start_lon,end_lat,end_lon FROM activities WHERE end_time IS NULL ORDER BY id DESC LIMIT 1", null
+        "SELECT id,type,start_time,end_time,note,start_lat,start_lon,end_lat,end_lon,start_place,end_place FROM activities WHERE end_time IS NULL ORDER BY id DESC LIMIT 1", null
     ).use { if (!it.moveToFirst()) null else readActivity(it) }
 
-    fun start(type: String, lat: Double?, lon: Double?): Long {
+    fun start(type: String, lat: Double?, lon: Double?, place: String? = null): Long {
         val v = ContentValues().apply {
             put("type", type); put("start_time", System.currentTimeMillis())
             if (lat != null) put("start_lat", lat)
             if (lon != null) put("start_lon", lon)
+            if (!place.isNullOrBlank()) put("start_place", place)
         }
         return writableDatabase.insert("activities", null, v)
     }
 
-    fun finish(id: Long, lat: Double?, lon: Double?) {
+    fun finish(id: Long, lat: Double?, lon: Double?, place: String? = null) {
         val v = ContentValues().apply {
             put("end_time", System.currentTimeMillis())
             if (lat != null) put("end_lat", lat)
             if (lon != null) put("end_lon", lon)
+            if (!place.isNullOrBlank()) put("end_place", place)
         }
         writableDatabase.update("activities", v, "id=?", arrayOf(id.toString()))
     }
