@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.MoveToInbox
+import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,8 +44,8 @@ class MainActivity : ComponentActivity() {
     private fun DopravaScreen() {
         val activities = listOf(
             "Jízda" to Icons.Filled.LocalShipping,
-            "Nákladka" to Icons.Filled.Inventory2,
-            "Výkladka" to Icons.Filled.Construction,
+            "Nákladka" to Icons.Filled.MoveToInbox,
+            "Výkladka" to Icons.Filled.Outbox,
             "Pauza" to Icons.Filled.Coffee,
             "Cesta domů" to Icons.Filled.Home
         )
