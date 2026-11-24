@@ -386,6 +386,7 @@ class MainActivity : ComponentActivity() {
                         val dayStart = cal.timeInMillis
                         val dayEnd = dayStart + 86400000L
                         val dayItems = history.filter { it.start < dayEnd && (it.end ?: tick) >= dayStart }
+                        val dayPauses = db.pausesForDay(dayStart, dayEnd)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("‹", modifier = Modifier.clickable { selectedDay -= 86400000L }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
                             Text("Denní přehled · " + dateOnly(dayStart), style = MaterialTheme.typography.titleLarge, color = navy)
@@ -403,11 +404,18 @@ class MainActivity : ComponentActivity() {
                                             size = androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f),54f),
                                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(5f,5f))
                                     }
+                                    dayPauses.forEach { item ->
+                                        val left = (((maxOf(item.start,dayStart)-dayStart).toFloat()/86400000f)*size.width).coerceIn(0f,size.width)
+                                        val right = (((minOf(item.end ?: tick,dayEnd)-dayStart).toFloat()/86400000f)*size.width).coerceIn(left,size.width)
+                                        drawRoundRect(Color(0xFFFFB21A), topLeft = androidx.compose.ui.geometry.Offset(left,8f),
+                                            size = androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f),54f),
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(5f,5f))
+                                    }
                                 }
-                                Text("Modrá = zaznamenaná činnost", color = blue)
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Text("■ Činnost", color = blue); Text("■ Pauza", color = Color(0xFFB47B00)) }
                             }
                         }
-                        if (dayItems.isEmpty()) Text("Pro tento den nejsou žádné záznamy.")
+                        if (dayItems.isEmpty() && dayPauses.isEmpty()) Text("Pro tento den nejsou žádné záznamy.")
                         dayItems.forEach { item ->
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                                 Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
