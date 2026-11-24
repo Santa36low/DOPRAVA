@@ -18,7 +18,7 @@ data class ActivityRecord(
 )
 data class FuelRecord(val id: Long, val liters: Double, val time: Long, val latitude: Double?, val longitude: Double?)
 
-class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null, 2) {
+class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null, 3) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE activities(id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER, start_lat REAL, start_lon REAL, end_lat REAL, end_lon REAL, note TEXT DEFAULT '')")
         db.execSQL("CREATE TABLE fuel(id INTEGER PRIMARY KEY AUTOINCREMENT, liters REAL NOT NULL, time INTEGER NOT NULL, lat REAL, lon REAL)")
@@ -27,6 +27,7 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) db.execSQL("CREATE TABLE IF NOT EXISTS pauses(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER)")
+        if (oldVersion < 3) db.execSQL("CREATE INDEX IF NOT EXISTS idx_route_activity_time ON route_points(activity_id, time)")
     }
 
     private fun readActivity(c: android.database.Cursor) = ActivityRecord(
@@ -109,11 +110,36 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         writableDatabase.insert("fuel", null, v)
     }
 
-    fun addRoutePoint(activityId: Long, lat: Double, lon: Double) {
+    data class RoutePoint(val time: Long, val latitude: Double, val longitude: Double)
+
+    fun addRoutePoint(activityId: Long, lat: Double, lon: Double, time: Long = System.currentTimeMillis()) {
         val v = ContentValues().apply {
-            put("activity_id", activityId); put("time", System.currentTimeMillis())
+            put("activity_id", activityId); put("time", time)
             put("lat", lat); put("lon", lon)
         }
         writableDatabase.insert("route_points", null, v)
+    }
+
+    fun routePoints(activityId: Long): List<RoutePoint> =
+        readableDatabase.rawQuery(
+            "SELECT time,lat,lon FROM route_points WHERE activity_id=? ORDER BY time",
+            arrayOf(activityId.toString())
+        ).use { c -> buildList {
+            while (c.moveToNext()) add(RoutePoint(c.getLong(0), c.getDouble(1), c.getDouble(2)))
+        } }
+
+    fun routeDistanceKm(activityId: Long): Double {
+        val points = routePoints(activityId)
+        if (points.size < 2) return 0.0
+        var meters = 0f
+        val result = FloatArray(1)
+        for (i in 1 until points.size) {
+            android.location.Location.distanceBetween(
+                points[i - 1].latitude, points[i - 1].longitude,
+                points[i].latitude, points[i].longitude, result
+            )
+            meters += result[0]
+        }
+        return meters / 1000.0
     }
 }
