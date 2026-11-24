@@ -3,6 +3,7 @@ package cz.santa36low.doprava
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -65,6 +66,13 @@ class MainActivity : ComponentActivity() {
         var page by remember { mutableStateOf(0) }
         var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
         var fuelText by remember { mutableStateOf("") }
+        var placeDialogVisible by remember { mutableStateOf(false) }
+        var placeResults by remember { mutableStateOf<List<NearbyPlace>>(emptyList()) }
+        var placeLoading by remember { mutableStateOf(false) }
+        var manualPlace by remember { mutableStateOf("") }
+        var pendingPlaceAction by remember { mutableStateOf<((String?) -> Unit)?>(null) }
+        var pendingLatitude by remember { mutableDoubleStateOf(0.0) }
+        var pendingLongitude by remember { mutableDoubleStateOf(0.0) }
 
         val permissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
@@ -102,30 +110,49 @@ class MainActivity : ComponentActivity() {
             pause = db.activePause()
         }
 
+        fun completePlace(name: String?) {
+            val action = pendingPlaceAction
+            pendingPlaceAction = null
+            placeDialogVisible = false
+            action?.invoke(name)
+        }
+
+        fun askForPlace(lat: Double?, lon: Double?, done: (String?) -> Unit) {
+            pendingPlaceAction = done
+            pendingLatitude = lat ?: 0.0
+            pendingLongitude = lon ?: 0.0
+            manualPlace = ""
+            placeResults = emptyList()
+            placeLoading = lat != null && lon != null
+            placeDialogVisible = true
+            if (lat == null || lon == null) return
+            Thread {
+                val results = runCatching { PlaceLookup.search(lat, lon) }.getOrDefault(emptyList())
+                runOnUiThread { placeResults = results; placeLoading = false }
+            }.start()
+        }
+
         fun startSelected() {
             if (active != null) return
             withLocation { lat, lon ->
-                val id = db.start(selectedType, lat, lon)
-                if (selectedType == "Jízda" && hasLocation()) {
-                    try {
-                        ContextCompat.startForegroundService(
-                            this,
-                            Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)
-                        )
-                    } catch (_: Exception) { }
-                } else {
-                    stopService(Intent(this, RouteTrackingService::class.java))
+                askForPlace(lat, lon) { placeName ->
+                    val id = db.start(selectedType, lat, lon, placeName)
+                    if (selectedType == "Jízda" && hasLocation()) {
+                        try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
+                    } else stopService(Intent(this, RouteTrackingService::class.java))
+                    refresh()
                 }
-                refresh()
             }
         }
 
         fun finishActive() {
             val current = active ?: return
             withLocation { lat, lon ->
-                db.finish(current.id, lat, lon)
-                stopService(Intent(this, RouteTrackingService::class.java))
-                refresh()
+                askForPlace(lat, lon) { placeName ->
+                    db.finish(current.id, lat, lon, placeName)
+                    stopService(Intent(this, RouteTrackingService::class.java))
+                    refresh()
+                }
             }
         }
 
