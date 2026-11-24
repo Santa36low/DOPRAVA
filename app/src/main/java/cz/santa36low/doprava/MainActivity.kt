@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
         )
         var active by remember { mutableStateOf(db.active()) }
         var history by remember { mutableStateOf(db.history()) }
+        var pause by remember { mutableStateOf(db.activePause()) }
         var selectedDay by remember { mutableLongStateOf(System.currentTimeMillis()) }
         var selectedType by remember { mutableStateOf("Jízda") }
         var page by remember { mutableStateOf(0) }
@@ -98,6 +99,7 @@ class MainActivity : ComponentActivity() {
         fun refresh() {
             active = db.active()
             history = db.history()
+            pause = db.activePause()
         }
 
         fun startSelected() {
@@ -300,13 +302,25 @@ class MainActivity : ComponentActivity() {
                                                 contentDescription = current.type, tint = blue, modifier = Modifier.size(38.dp))
                                             Text(current.type, style = MaterialTheme.typography.headlineSmall, color = navy)
                                         }
-                                        Text("Datum: ${dateOnly(current.start)}")
-                                        Text("Začátek: ${timeOnly(current.start)}")
-                                        Text("GPS začátku: ${coordinates(current.startLat, current.startLon)}")
                                         Text("TRVÁNÍ", color = blue, style = MaterialTheme.typography.labelLarge)
-                                        Text(formatDuration(duration), style = MaterialTheme.typography.headlineLarge, color = navy)
+                                        Text(formatDuration((duration - db.pauseDurationMillis(current.id)).coerceAtLeast(0)), style = MaterialTheme.typography.headlineLarge, color = navy)
+                                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text("Datum: ${dateOnly(current.start)}")
+                                            Text("Začátek: ${timeOnly(current.start)}")
+                                            if (current.type != "Pauza") Text("GPS začátku: ${coordinates(current.startLat, current.startLon)}")
+                                        }
+                                        if (pause == null) {
+                                            OutlinedButton(onClick = { db.startPause(current.id); refresh() },
+                                                modifier = Modifier.fillMaxWidth().height(44.dp)) { Text("☕  ZAHÁJIT PAUZU") }
+                                        } else {
+                                            Text("PAUZA PROBÍHÁ", color = Color(0xFFB47B00), style = MaterialTheme.typography.titleMedium)
+                                            Text(formatDuration(tick - pause!!.second), style = MaterialTheme.typography.headlineSmall, color = navy)
+                                            Button(onClick = { db.finishPause(); refresh() },
+                                                modifier = Modifier.fillMaxWidth().height(44.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB47B00))) { Text("UKONČIT PAUZU") }
+                                        }
                                         Button(
-                                            onClick = { finishActive() },
+                                            onClick = { if (pause != null) db.finishPause(); finishActive() },
                                             modifier = Modifier.fillMaxWidth().height(58.dp),
                                             shape = RoundedCornerShape(14.dp),
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC92D35))
