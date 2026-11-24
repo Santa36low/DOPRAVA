@@ -292,7 +292,7 @@ class MainActivity : ComponentActivity() {
                                 pair.forEach { (name, icon) ->
                                     val chosen = active?.type == name || (active == null && selectedType == name)
                                     Card(
-                                        modifier = Modifier.weight(1f).height(94.dp).clickable(enabled = name != "Pauza" || active != null) {
+                                        modifier = Modifier.weight(1f).height(94.dp).clickable {
                                             if (name == "Pauza" && active != null) {
                                                 if (pause == null) {
                                                     db.startPause(active!!.id)
@@ -302,7 +302,7 @@ class MainActivity : ComponentActivity() {
                                                     if (active!!.type == "Jízda" && hasLocation()) ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, RouteTrackingService::class.java).putExtra("activity_id", active!!.id))
                                                 }
                                                 refresh()
-                                            } else if (active == null && name != "Pauza") selectedType = name
+                                            } else if (active == null) selectedType = name
                                         },
                                         shape = RoundedCornerShape(19.dp),
                                         border = androidx.compose.foundation.BorderStroke(
@@ -310,7 +310,7 @@ class MainActivity : ComponentActivity() {
                                             if (chosen) blue else Color(0xFFD1D9E5)
                                         ),
                                         colors = CardDefaults.cardColors(
-                                            containerColor = if (chosen) Color(0xFFE1EDFA) else if (name == "Pauza" && active == null) Color(0xFFE9EDF2) else Color.White
+                                            containerColor = if (chosen) Color(0xFFE1EDFA) else Color.White
                                         ),
                                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                     ) {
@@ -319,7 +319,7 @@ class MainActivity : ComponentActivity() {
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.Center
                                         ) {
-                                            Icon(icon, contentDescription = name, tint = if (name == "Pauza" && active == null) Color.Gray else activityIcon,
+                                            Icon(icon, contentDescription = name, tint = activityIcon,
                                                 modifier = Modifier.size(33.dp))
                                             Spacer(Modifier.height(6.dp))
                                             Text(name, style = MaterialTheme.typography.titleMedium, color = Color(0xFF101827))
