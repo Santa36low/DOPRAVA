@@ -262,7 +262,7 @@ class MainActivity : ComponentActivity() {
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Filled.LocalShipping, contentDescription = "Logo kamionu",
-                                tint = Color.White, modifier = Modifier.size(43.dp))
+                                tint = Color.White, modifier = Modifier.size(37.dp))
                             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 7.dp)
                                 .fillMaxWidth(0.68f).height(4.dp).background(gold, RoundedCornerShape(50)))
                         }
