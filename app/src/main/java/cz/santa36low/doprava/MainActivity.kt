@@ -162,6 +162,35 @@ class MainActivity : ComponentActivity() {
         val pageBg = Color(0xFFF0F3F8)
         val activityIcon = Color(0xFF0B4A78)
 
+        if (placeDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { completePlace(null) },
+                title = { Text("Firma nebo místo") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(if (placeLoading) "Hledám provozovny v okolí GPS…" else if (placeResults.isEmpty()) "V okolí nebyla nalezena pojmenovaná firma. Můžeš ji vyhledat nebo zadat ručně." else "Vyber nalezenou firmu:")
+                        placeResults.forEach { place ->
+                            TextButton(onClick = { completePlace(if (place.address.isBlank()) place.name else place.name + ", " + place.address) }) {
+                                Text(if (place.address.isBlank()) place.name else place.name + " · " + place.address)
+                            }
+                        }
+                        OutlinedTextField(value = manualPlace, onValueChange = { manualPlace = it }, label = { Text("Ruční zadání názvu / adresy") }, singleLine = true)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                val url = "https://www.openstreetmap.org/?mlat=" + pendingLatitude + "&mlon=" + pendingLongitude + "#map=17/" + pendingLatitude + "/" + pendingLongitude
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            }) { Text("Mapa") }
+                            TextButton(onClick = {
+                                val query = if (manualPlace.isNotBlank()) manualPlace else pendingLatitude.toString() + "," + pendingLongitude.toString()
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/search?query=" + Uri.encode(query))))
+                            }) { Text("Vyhledávání") }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { completePlace(manualPlace.trim().ifBlank { null }) }, enabled = manualPlace.isNotBlank()) { Text("Použít ruční zadání") } },
+                dismissButton = { TextButton(onClick = { completePlace(null) }) { Text("Pokračovat bez názvu") } }
+            )
+        }
         Scaffold(
             containerColor = pageBg,
             bottomBar = {
@@ -332,6 +361,7 @@ class MainActivity : ComponentActivity() {
                                             Text("Datum: ${dateOnly(current.start)}")
                                             Text("Začátek: ${timeOnly(current.start)}")
                                             if (current.type != "Pauza") Text("GPS začátku: ${coordinates(current.startLat, current.startLon)}")
+                                            current.startPlace?.let { Text("Místo: $it") }
                                         }
                                         if (pause == null) {
                                             OutlinedButton(onClick = { db.startPause(current.id); if (current.type == "Jízda") stopService(Intent(this@MainActivity, RouteTrackingService::class.java)); refresh() },
@@ -399,7 +429,9 @@ class MainActivity : ComponentActivity() {
                                         Text("Začátek: ${timeOnly(item.start)}")
                                         Text("Konec: ${item.end?.let { timeOnly(it) } ?: "Právě probíhá"}")
                                         Text("GPS začátku: ${coordinates(item.startLat, item.startLon)}")
+                                        item.startPlace?.let { Text("Místo začátku: $it") }
                                         Text("GPS konce: ${coordinates(item.endLat, item.endLon)}")
+                                        item.endPlace?.let { Text("Místo konce: $it") }
                                         Text("Trvání: ${item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id))}")
                                         if (item.type == "Jízda") {
                                             val kilometers = db.routeDistanceKm(item.id)
