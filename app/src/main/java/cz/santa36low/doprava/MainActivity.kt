@@ -54,7 +54,6 @@ class MainActivity : ComponentActivity() {
             "Jízda" to Icons.Filled.LocalShipping,
             "Nákladka" to Icons.Filled.MoveToInbox,
             "Výkladka" to Icons.Filled.Outbox,
-            "Pauza" to Icons.Filled.Coffee,
             "Cesta domů" to Icons.Filled.Home
         )
         var active by remember { mutableStateOf(db.active()) }
