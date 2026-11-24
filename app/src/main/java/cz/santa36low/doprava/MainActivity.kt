@@ -425,6 +425,15 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                        dayPauses.forEach { item ->
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E5))) {
+                                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text("Pauza", style = MaterialTheme.typography.titleMedium, color = Color(0xFF946000))
+                                    Text(timeOnly(maxOf(item.start,dayStart)) + " – " + (item.end?.let { timeOnly(minOf(it,dayEnd)) } ?: "probíhá"))
+                                    Text("Trvání: " + formatDuration(((item.end ?: tick).coerceAtMost(dayEnd)-item.start.coerceAtLeast(dayStart)).coerceAtLeast(0)))
+                                }
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
