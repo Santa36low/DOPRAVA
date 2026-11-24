@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity() {
             withLocation { lat, lon ->
                 askForPlace(lat, lon) { placeName ->
                     val id = db.start(selectedType, lat, lon, placeName)
+                    if (selectedType == "Jízda" && lat != null && lon != null) db.addRoutePoint(id, lat, lon)
                     if (selectedType == "Jízda" && hasLocation()) {
                         try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
                     } else stopService(Intent(this, RouteTrackingService::class.java))
@@ -147,8 +148,15 @@ class MainActivity : ComponentActivity() {
 
         fun finishActive() {
             val current = active ?: return
+            if (pause != null) {
+                db.finish(current.id, null, null, null)
+                stopService(Intent(this, RouteTrackingService::class.java))
+                refresh()
+                return
+            }
             withLocation { lat, lon ->
                 askForPlace(lat, lon) { placeName ->
+                    if (current.type == "Jízda" && lat != null && lon != null) db.addRoutePoint(current.id, lat, lon)
                     db.finish(current.id, lat, lon, placeName)
                     stopService(Intent(this, RouteTrackingService::class.java))
                     refresh()
