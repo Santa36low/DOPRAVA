@@ -178,7 +178,9 @@ class MainActivity : ComponentActivity() {
                                     Text(activities.firstOrNull { it.first == active!!.type }?.second ?: "⏱️", style = MaterialTheme.typography.headlineLarge)
                                     Text(active!!.type, style = MaterialTheme.typography.headlineMedium)
                                 }
-                                Text("Od: ${date(active!!.start)}")
+                                Text("Datum: ${dateOnly(active!!.start)}")
+                                Text("Začátek: ${timeOnly(active!!.start)}")
+                                Text("GPS začátku: ${coordinates(active!!.startLat, active!!.startLon)}")
                                 Text("Trvání: ${formatDuration(duration)}", style = MaterialTheme.typography.headlineSmall)
                                 Button(
                                     onClick = { finishActive() },
@@ -229,6 +231,8 @@ class MainActivity : ComponentActivity() {
                                         Text("Datum: ${dateOnly(item.start)}")
                                         Text("Začátek: ${timeOnly(item.start)}")
                                         Text("Konec: ${item.end?.let { timeOnly(it) } ?: "Právě probíhá"}")
+                                        Text("GPS začátku: ${coordinates(item.startLat, item.startLon)}")
+                                        Text("GPS konce: ${coordinates(item.endLat, item.endLon)}")
                                         Text("Trvání: ${item.end?.let { formatDuration(it - item.start) } ?: formatDuration(tick - item.start)}")
                                     }
                                 }
@@ -240,6 +244,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun coordinates(lat: Double?, lon: Double?): String = if (lat != null && lon != null) "%.5f, %.5f".format(Locale.US, lat, lon) else "Není k dispozici"
     private fun dateOnly(ms: Long) = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(ms))
     private fun timeOnly(ms: Long) = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(ms))
     private fun date(ms: Long) = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date(ms))
