@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.material.icons.filled.Settings
@@ -372,7 +373,22 @@ class MainActivity : ComponentActivity() {
                                         Text("Konec: ${item.end?.let { timeOnly(it) } ?: "Právě probíhá"}")
                                         Text("GPS začátku: ${coordinates(item.startLat, item.startLon)}")
                                         Text("GPS konce: ${coordinates(item.endLat, item.endLon)}")
-                                        Text("Trvání: ${item.end?.let { formatDuration(it - item.start) } ?: formatDuration(tick - item.start)}")
+                                        Text("Trvání: ${item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id))}")
+                                        if (item.type == "Jízda") {
+                                            val kilometers = db.routeDistanceKm(item.id)
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("Ujeto: %.1f km".format(Locale.getDefault(), kilometers), color = navy,
+                                                    style = MaterialTheme.typography.titleMedium)
+                                                IconButton(onClick = {
+                                                    startActivity(Intent(this@MainActivity, TrackMapActivity::class.java)
+                                                        .putExtra("activity_id", item.id))
+                                                }) {
+                                                    Icon(Icons.Filled.Map, contentDescription = "Zobrazit trasu na mapě",
+                                                        tint = blue, modifier = Modifier.size(30.dp))
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
