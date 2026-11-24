@@ -284,7 +284,7 @@ class MainActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (page == 0) {
-                        (activities + if (active != null) listOf("Pauza" to Icons.Filled.Coffee) else emptyList()).chunked(2).forEach { pair ->
+                        (activities + listOf("Pauza" to Icons.Filled.Coffee)).chunked(2).forEach { pair ->
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -292,7 +292,7 @@ class MainActivity : ComponentActivity() {
                                 pair.forEach { (name, icon) ->
                                     val chosen = active?.type == name || (active == null && selectedType == name)
                                     Card(
-                                        modifier = Modifier.weight(1f).height(94.dp).clickable {
+                                        modifier = Modifier.weight(1f).height(94.dp).clickable(enabled = name != "Pauza" || active != null) {
                                             if (name == "Pauza" && active != null) {
                                                 if (pause == null) {
                                                     db.startPause(active!!.id)
@@ -310,7 +310,7 @@ class MainActivity : ComponentActivity() {
                                             if (chosen) blue else Color(0xFFD1D9E5)
                                         ),
                                         colors = CardDefaults.cardColors(
-                                            containerColor = if (chosen) Color(0xFFE1EDFA) else Color.White
+                                            containerColor = if (chosen) Color(0xFFE1EDFA) else if (name == "Pauza" && active == null) Color(0xFFE9EDF2) else Color.White
                                         ),
                                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                     ) {
@@ -319,7 +319,7 @@ class MainActivity : ComponentActivity() {
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.Center
                                         ) {
-                                            Icon(icon, contentDescription = name, tint = activityIcon,
+                                            Icon(icon, contentDescription = name, tint = if (name == "Pauza" && active == null) Color.Gray else activityIcon,
                                                 modifier = Modifier.size(33.dp))
                                             Spacer(Modifier.height(6.dp))
                                             Text(name, style = MaterialTheme.typography.titleMedium, color = Color(0xFF101827))
@@ -437,15 +437,15 @@ class MainActivity : ComponentActivity() {
                                             Icon(itemIcon, contentDescription = item.type, tint = blue, modifier = Modifier.size(30.dp))
                                             Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
                                         }
-                                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                            Text("Datum: ${dateOnly(item.start)}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                                            Text("Začátek: ${timeOnly(item.start)}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                                            Text("Konec: ${item.end?.let { timeOnly(it) } ?: "Právě probíhá"}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                                            Text("GPS začátku: ${coordinates(item.startLat, item.startLon)}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                                            item.startPlace?.let { Text("Místo začátku: $it", textAlign = androidx.compose.ui.text.style.TextAlign.End) }
-                                            Text("GPS konce: ${coordinates(item.endLat, item.endLon)}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                                            item.endPlace?.let { Text("Místo konce: $it", textAlign = androidx.compose.ui.text.style.TextAlign.End) }
-                                            Text("Trvání: ${item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id))}", textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            InfoRow("Datum", dateOnly(item.start))
+                                            InfoRow("Začátek", timeOnly(item.start))
+                                            InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
+                                            InfoRow("GPS začátku", coordinates(item.startLat, item.startLon))
+                                            item.startPlace?.let { InfoRow("Místo začátku", it) }
+                                            InfoRow("GPS konce", coordinates(item.endLat, item.endLon))
+                                            item.endPlace?.let { InfoRow("Místo konce", it) }
+                                            InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
                                         }
                                         if (item.type == "Jízda") {
                                             val kilometers = db.routeDistanceKm(item.id)
@@ -526,6 +526,14 @@ class MainActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.height(8.dp))
             }
+        }
+    }
+
+    @Composable
+    private fun InfoRow(label: String, value: String) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("$label:", modifier = Modifier.weight(1f), color = Color(0xFF596575))
+            Text(value, modifier = Modifier.weight(1.5f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
         }
     }
 
