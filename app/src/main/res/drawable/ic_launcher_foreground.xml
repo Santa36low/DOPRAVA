@@ -3,12 +3,23 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M17,29 L62,29 L62,65 L17,65 Z M62,39 L78,39 L92,54 L92,65 L62,65 Z M70,44 L70,54 L85,54 L77,44 Z" />
-    <path android:fillColor="#FF0B2B4D"
-        android:pathData="M25,68 A8,8 0,1 0,41 68 A8,8 0,1 0,25 68 M68,68 A8,8 0,1 0,84 68 A8,8 0,1 0,68 68" />
-    <path android:fillColor="#FFFFB21A"
-        android:pathData="M8,82 Q34,69 55,80 Q77,91 100,75 L100,82 Q77,99 53,88 Q32,78 8,90 Z" />
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M10,19 L36,19 L36,22 L10,22 Z M18,14 L45,14 L45,17 L18,17 Z" />
+    <!-- Smaller centered truck, kept inside the adaptive icon safe area. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M25,34 L61,34 L61,61 L25,61 Z M61,42 L75,42 L84,52 L84,61 L61,61 Z" />
+    <path
+        android:fillColor="#FF7FC4E8"
+        android:pathData="M66,46 L74,46 L80,53 L66,53 Z" />
+    <path
+        android:fillColor="#FF0B2B4D"
+        android:pathData="M30,39 L56,39 L56,43 L30,43 Z" />
+    <path
+        android:fillColor="#FF071A2B"
+        android:pathData="M30,64 A8,8 0,1 0,46 64 A8,8 0,1 0,30 64 M64,64 A8,8 0,1 0,80 64 A8,8 0,1 0,64 64" />
+    <path
+        android:fillColor="#FFFFB21A"
+        android:pathData="M35,64 A3,3 0,1 0,41 64 A3,3 0,1 0,35 64 M69,64 A3,3 0,1 0,75 64 A3,3 0,1 0,69 64" />
+    <path
+        android:fillColor="#FFFFB21A"
+        android:pathData="M23,78 L85,78 L82,82 L26,82 Z" />
 </vector>
