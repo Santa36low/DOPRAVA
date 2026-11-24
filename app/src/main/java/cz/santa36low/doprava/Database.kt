@@ -102,6 +102,14 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         writableDatabase.update("pauses", v, "end_time IS NULL", null)
     }
 
+    fun latestPause(activityId: Long): Pair<Long, Long?>? =
+        readableDatabase.rawQuery(
+            "SELECT start_time,end_time FROM pauses WHERE activity_id=? ORDER BY id DESC LIMIT 1",
+            arrayOf(activityId.toString())
+        ).use { c ->
+            if (c.moveToFirst()) c.getLong(0) to (if (c.isNull(1)) null else c.getLong(1)) else null
+        }
+
     data class PauseRecord(val id: Long, val activityId: Long, val start: Long, val end: Long?)
 
     fun pausesForDay(dayStart: Long, dayEnd: Long): List<PauseRecord> =
