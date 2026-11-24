@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -195,7 +196,7 @@ class MainActivity : ComponentActivity() {
                             Box(Modifier.padding(top = 5.dp).width(104.dp).height(3.dp)
                                 .background(gold, RoundedCornerShape(50)))
                         }
-                        Icon(Icons.Filled.Construction, contentDescription = null,
+                        Icon(Icons.Filled.Settings, contentDescription = "Nastavení",
                             tint = Color(0xFFB9C9DA), modifier = Modifier.size(27.dp))
                     }
                 }
