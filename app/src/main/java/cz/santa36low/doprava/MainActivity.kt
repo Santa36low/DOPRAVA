@@ -296,12 +296,9 @@ class MainActivity : ComponentActivity() {
                                             style = MaterialTheme.typography.titleLarge)
                                     }
                                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            Icon(activities.firstOrNull { it.first == current.type }?.second ?: Icons.Filled.LocalShipping,
-                                                contentDescription = current.type, tint = blue, modifier = Modifier.size(38.dp))
-                                            Text(current.type, style = MaterialTheme.typography.headlineSmall, color = navy)
-                                        }
+                                        Icon(activities.firstOrNull { it.first == current.type }?.second ?: Icons.Filled.LocalShipping,
+                                            contentDescription = current.type, tint = blue, modifier = Modifier.size(48.dp))
+                                        Text(current.type, style = MaterialTheme.typography.headlineSmall, color = navy)
                                         Text("TRVÁNÍ", color = blue, style = MaterialTheme.typography.labelLarge)
                                         Text(formatDuration((duration - db.pauseDurationMillis(current.id)).coerceAtLeast(0)), style = MaterialTheme.typography.headlineLarge, color = navy)
                                         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -310,12 +307,12 @@ class MainActivity : ComponentActivity() {
                                             if (current.type != "Pauza") Text("GPS začátku: ${coordinates(current.startLat, current.startLon)}")
                                         }
                                         if (pause == null) {
-                                            OutlinedButton(onClick = { db.startPause(current.id); refresh() },
+                                            OutlinedButton(onClick = { db.startPause(current.id); if (current.type == "Jízda") stopService(Intent(this@MainActivity, RouteTrackingService::class.java)); refresh() },
                                                 modifier = Modifier.fillMaxWidth().height(44.dp)) { Text("☕  ZAHÁJIT PAUZU") }
                                         } else {
                                             Text("PAUZA PROBÍHÁ", color = Color(0xFFB47B00), style = MaterialTheme.typography.titleMedium)
                                             Text(formatDuration(tick - pause!!.second), style = MaterialTheme.typography.headlineSmall, color = navy)
-                                            Button(onClick = { db.finishPause(); refresh() },
+                                            Button(onClick = { db.finishPause(); if (current.type == "Jízda" && hasLocation()) ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, RouteTrackingService::class.java).putExtra("activity_id", current.id)); refresh() },
                                                 modifier = Modifier.fillMaxWidth().height(44.dp),
                                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB47B00))) { Text("UKONČIT PAUZU") }
                                         }
