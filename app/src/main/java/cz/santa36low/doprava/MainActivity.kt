@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.MoveToInbox
@@ -57,6 +59,7 @@ class MainActivity : ComponentActivity() {
         )
         var active by remember { mutableStateOf(db.active()) }
         var history by remember { mutableStateOf(db.history()) }
+        var selectedDay by remember { mutableLongStateOf(System.currentTimeMillis()) }
         var selectedType by remember { mutableStateOf("Jízda") }
         var page by remember { mutableStateOf(0) }
         var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -153,7 +156,7 @@ class MainActivity : ComponentActivity() {
                     NavigationBarItem(
                         selected = page == 1,
                         onClick = { page = 1; refresh() },
-                        icon = { Text("◷", style = MaterialTheme.typography.headlineSmall) },
+                        icon = { Icon(Icons.Filled.History, contentDescription = "Historie", modifier = Modifier.size(30.dp)) },
                         label = { Text("Historie") },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = gold,
@@ -162,6 +165,14 @@ class MainActivity : ComponentActivity() {
                             unselectedIconColor = Color.LightGray,
                             unselectedTextColor = Color.LightGray
                         )
+                    )
+                    NavigationBarItem(
+                        selected = page == 2,
+                        onClick = { page = 2; refresh() },
+                        icon = { Icon(Icons.Filled.LocalShipping, contentDescription = "Denní přehled", modifier = Modifier.size(30.dp)) },
+                        label = { Text("Den") },
+                        colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
+                            indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
                     )
                 }
             }
@@ -207,7 +218,6 @@ class MainActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (page == 0) {
-                        Text("Vyber činnost", style = MaterialTheme.typography.titleLarge, color = navy)
                         activities.chunked(2).forEach { pair ->
                             Row(
                                 Modifier.fillMaxWidth(),
@@ -216,7 +226,7 @@ class MainActivity : ComponentActivity() {
                                 pair.forEach { (name, icon) ->
                                     val chosen = active?.type == name || (active == null && selectedType == name)
                                     Card(
-                                        modifier = Modifier.weight(1f).height(112.dp).clickable {
+                                        modifier = Modifier.weight(1f).height(94.dp).clickable {
                                             if (active == null) selectedType = name
                                         },
                                         shape = RoundedCornerShape(19.dp),
@@ -235,7 +245,7 @@ class MainActivity : ComponentActivity() {
                                             verticalArrangement = Arrangement.Center
                                         ) {
                                             Icon(icon, contentDescription = name, tint = activityIcon,
-                                                modifier = Modifier.size(39.dp))
+                                                modifier = Modifier.size(33.dp))
                                             Spacer(Modifier.height(6.dp))
                                             Text(name, style = MaterialTheme.typography.titleMedium, color = Color(0xFF101827))
                                             if (active?.type == name) Text("PROBÍHÁ", color = blue,
@@ -330,7 +340,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
-                    } else {
+                    } else if (page == 1) {
                         Text("Historie činností", style = MaterialTheme.typography.titleLarge, color = navy)
                         if (history.isEmpty()) {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -354,6 +364,45 @@ class MainActivity : ComponentActivity() {
                                         Text("GPS konce: ${coordinates(item.endLat, item.endLon)}")
                                         Text("Trvání: ${item.end?.let { formatDuration(it - item.start) } ?: formatDuration(tick - item.start)}")
                                     }
+                                }
+                            }
+                        }
+                    } else {
+                        val cal = Calendar.getInstance().apply {
+                            timeInMillis = selectedDay
+                            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                        }
+                        val dayStart = cal.timeInMillis
+                        val dayEnd = dayStart + 86400000L
+                        val dayItems = history.filter { it.start < dayEnd && (it.end ?: tick) >= dayStart }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("‹", modifier = Modifier.clickable { selectedDay -= 86400000L }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
+                            Text("Denní přehled · " + dateOnly(dayStart), style = MaterialTheme.typography.titleLarge, color = navy)
+                            Text("›", modifier = Modifier.clickable { selectedDay += 86400000L }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
+                        }
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Časová osa 00:00–24:00", color = navy, style = MaterialTheme.typography.titleMedium)
+                                Canvas(Modifier.fillMaxWidth().height(70.dp)) {
+                                    drawRoundRect(Color(0xFFE8EDF4), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f,10f))
+                                    dayItems.forEach { item ->
+                                        val left = (((maxOf(item.start,dayStart)-dayStart).toFloat()/86400000f)*size.width).coerceIn(0f,size.width)
+                                        val right = (((minOf(item.end ?: tick,dayEnd)-dayStart).toFloat()/86400000f)*size.width).coerceIn(left,size.width)
+                                        drawRoundRect(blue, topLeft = androidx.compose.ui.geometry.Offset(left,8f),
+                                            size = androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f),54f),
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(5f,5f))
+                                    }
+                                }
+                                Text("Modrá = zaznamenaná činnost", color = blue)
+                            }
+                        }
+                        if (dayItems.isEmpty()) Text("Pro tento den nejsou žádné záznamy.")
+                        dayItems.forEach { item ->
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
+                                    Text(timeOnly(maxOf(item.start,dayStart)) + " – " + (item.end?.let { timeOnly(minOf(it,dayEnd)) } ?: "probíhá"))
+                                    Text("Trvání: " + formatDuration(((item.end ?: tick).coerceAtMost(dayEnd)-item.start.coerceAtLeast(dayStart)).coerceAtLeast(0)))
                                 }
                             }
                         }
