@@ -426,34 +426,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            drawerContent = {
-                ModalDrawerSheet {
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                        label = { Text("Přihlásit") },
-                        selected = false,
-                        onClick = { },
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        colors = NavigationDrawerItemDefaults.colors(
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        )
-                    )
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.Inventory2, contentDescription = null) },
-                        label = { Text("Záloha") },
-                        selected = page == 3,
-                        onClick = {
-                            page = 3
-                            drawerScope.launch { drawerState.close() }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-                }
-            }
-        ) {
+        Box(Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = pageBg,
             bottomBar = {
@@ -529,7 +502,7 @@ class MainActivity : ComponentActivity() {
                             Box(Modifier.padding(top = 5.dp).width(104.dp).height(3.dp)
                                 .background(gold, RoundedCornerShape(50)))
                         }
-                        IconButton(onClick = { drawerScope.launch { drawerState.open() } }) {
+                        IconButton(onClick = { drawerScope.launch { if (drawerState.isOpen) drawerState.close() else drawerState.open() } }) {
                             Icon(Icons.Filled.Settings, contentDescription = "Otevřít nabídku",
                                 tint = Color(0xFFB9C9DA), modifier = Modifier.size(27.dp))
                         }
@@ -875,6 +848,53 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+            }
+        }
+        if (drawerState.isOpen) {
+            Box(
+                Modifier.fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.28f))
+                    .clickable { drawerScope.launch { drawerState.close() } }
+            )
+            Column(
+                Modifier.align(Alignment.TopEnd)
+                    .fillMaxHeight()
+                    .width(IntrinsicSize.Max)
+                    .widthIn(min = 168.dp, max = 240.dp)
+                    .border(2.dp, Color(0xFF2684D8), RoundedCornerShape(bottomStart = 14.dp))
+                    .background(Color(0xFF102B46))
+                    .padding(horizontal = 12.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Filled.Settings, contentDescription = null, tint = Color(0xFFB9C9DA))
+                    Text("Nastavení", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White.copy(alpha = 0.38f))
+                    Text("Přihlásit", color = Color.White.copy(alpha = 0.38f))
+                }
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable {
+                            page = 3
+                            drawerScope.launch { drawerState.close() }
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Filled.Inventory2, contentDescription = null, tint = Color.White)
+                    Text("Záloha", color = Color.White)
+                }
             }
         }
         }
