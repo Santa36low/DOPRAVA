@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val drawerScope = rememberCoroutineScope()
         var backupMessage by remember { mutableStateOf("") }
+        var cloudBusy by remember { mutableStateOf(false) }
         val firebaseAuth = remember { FirebaseAuth.getInstance() }
         var currentUser by remember { mutableStateOf(firebaseAuth.currentUser) }
         var authDialogVisible by remember { mutableStateOf(false) }
@@ -310,6 +311,93 @@ class MainActivity : ComponentActivity() {
                     askForPlace(lat, lon, title, save)
                 } else save(null)
             }
+        }
+
+        fun uploadCloudBackup() {
+            val userId = currentUser?.uid
+            if (userId == null) {
+                backupMessage = "Nejdříve se přihlas ke svému Firebase účtu."
+                return
+            }
+            if (active != null) {
+                backupMessage = "Před zálohováním ukonči probíhající činnost, aby se uložila kompletní databáze."
+                return
+            }
+            if (cloudBusy) return
+            cloudBusy = true
+            backupMessage = "Připravuji databázi a odesílám ji do Firebase…"
+            Thread {
+                var closed = false
+                var message: String
+                try {
+                    db.checkpointForBackup()
+                    db.close()
+                    closed = true
+                    val source = getDatabasePath("doprava.db")
+                    CloudDatabaseBackup.upload(source, userId)
+                    message = "Záloha byla úspěšně uložena do Firebase. Můžeš ji obnovit po instalaci nové verze."
+                } catch (e: Exception) {
+                    message = "Zálohu se nepodařilo odeslat: ${e.cause?.localizedMessage ?: e.localizedMessage ?: "chyba"}"
+                } finally {
+                    if (closed) {
+                        runOnUiThread {
+                            db = Database(this@MainActivity)
+                            cloudBusy = false
+                            refresh()
+                            backupMessage = if (message.isBlank()) "Zálohování dokončeno." else message
+                        }
+                    } else {
+                        runOnUiThread { cloudBusy = false; backupMessage = message }
+                    }
+                }
+            }.start()
+        }
+
+        fun downloadCloudBackup() {
+            val userId = currentUser?.uid
+            if (userId == null) {
+                backupMessage = "Nejdříve se přihlas ke svému Firebase účtu."
+                return
+            }
+            if (active != null) {
+                backupMessage = "Před synchronizací ukonči probíhající činnost. Stažená databáze nahradí místní data."
+                return
+            }
+            if (cloudBusy) return
+            cloudBusy = true
+            backupMessage = "Stahuji zálohu z Firebase a ověřuji databázi…"
+            Thread {
+                var closed = false
+                var message: String
+                try {
+                    val temp = File(cacheDir, "doprava-cloud-restore.db")
+                    CloudDatabaseBackup.downloadToFile(temp, userId)
+                    db.close()
+                    closed = true
+                    stopService(Intent(this@MainActivity, RouteTrackingService::class.java))
+                    val databaseFile = getDatabasePath("doprava.db")
+                    File(databaseFile.path + "-wal").delete()
+                    File(databaseFile.path + "-shm").delete()
+                    File(databaseFile.path + "-journal").delete()
+                    temp.copyTo(databaseFile, overwrite = true)
+                    temp.delete()
+                    message = "Synchronizace dokončena. Místní databáze byla obnovena z Firebase."
+                } catch (e: Exception) {
+                    message = "Synchronizaci se nepodařilo dokončit: ${e.cause?.localizedMessage ?: e.localizedMessage ?: "chyba"}"
+                } finally {
+                    if (closed) {
+                        runOnUiThread {
+                            db = Database(this@MainActivity)
+                            cloudBusy = false
+                            refresh()
+                            backupMessage = message
+                            page = 1
+                        }
+                    } else {
+                        runOnUiThread { cloudBusy = false; backupMessage = message }
+                    }
+                }
+            }.start()
         }
 
         val navy = Color(0xFF0B2B4D)
@@ -642,15 +730,29 @@ class MainActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (page == 3) {
-                        Text("Záloha a obnova dat", style = MaterialTheme.typography.titleLarge, color = navy)
-                        Text("Uložení zálohy vytvoří soubor se všemi záznamy, GPS trasami, pauzami a tankováním. Soubor můžeš přenést do nové instalace aplikace.")
-                        Button(onClick = { exportBackupLauncher.launch("Doprava-zaloha.db") }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = blue)) {
-                            Text("Uložit zálohu")
+                        Text("Synchronizace databáze Firebase", style = MaterialTheme.typography.titleLarge, color = navy)
+                        if (currentUser == null) {
+                            Text("Pro zálohování a synchronizaci se nejdříve přihlas nebo zaregistruj v nabídce nastavení.")
+                        } else {
+                            Text("Přihlášený účet: ${currentUser?.email ?: "Firebase účet"}")
+                            Button(
+                                onClick = { uploadCloudBackup() },
+                                enabled = !cloudBusy && active == null,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = blue)
+                            ) { Text("Zálohovat – odeslat do Firebase") }
+                            OutlinedButton(
+                                onClick = { downloadCloudBackup() },
+                                enabled = !cloudBusy && active == null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Synchronizace – stáhnout z Firebase") }
                         }
-                        OutlinedButton(onClick = { importBackupLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Obnovit ze zálohy")
+                        if (active != null) Text("Nejdříve ukonči probíhající činnost. Tím se zajistí úplná a konzistentní záloha.", color = Color(0xFF9A5B00))
+                        Text("Záloha uloží celou databázi včetně historie, GPS tras, pauz a tankování. Synchronizace stáhne poslední zálohu tohoto účtu a nahradí jí data v telefonu. Před stažením si případně nejprve vytvoř zálohu aktuálních dat.", color = Color(0xFF9A5B00))
+                        if (cloudBusy) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                            Text("Probíhá přenos databáze…")
                         }
-                        Text("Pozor: obnovení nahradí současnou historii obsahem záložního souboru. Před obnovou si případně nejprve ulož aktuální zálohu.", color = Color(0xFF9A5B00))
                         if (backupMessage.isNotBlank()) Text(backupMessage, color = navy)
                     } else if (page == 0) {
                         (activities + listOf("Pauza" to Icons.Filled.Coffee)).chunked(2).forEach { pair ->
@@ -1143,7 +1245,7 @@ class MainActivity : ComponentActivity() {
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(Icons.Filled.Inventory2, contentDescription = null, tint = Color.White)
-                    Text("Záloha", color = Color.White)
+                    Text("Synchronizace", color = Color.White)
                 }
             }
         }
