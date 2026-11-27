@@ -705,9 +705,12 @@ class MainActivity : ComponentActivity() {
                                         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                             item.company?.let { InfoRow("Firma", it) }
                                             item.note.takeIf { it.isNotBlank() }?.let { InfoRow("Poznámka", it) }
+                                            InfoRow("Datum", dateOnly(item.start))
+                                            InfoRow("GPS začátku", coordinates(item.startLat, item.startLon))
                                             InfoRow("Lokace", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
-                                            InfoRow("Začátek", timeOnly(item.start))
+                                            InfoRow("GPS konce", coordinates(item.endLat, item.endLon))
                                             InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                                            InfoRow("Začátek", timeOnly(item.start))
                                             InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
                                             InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
                                         }
