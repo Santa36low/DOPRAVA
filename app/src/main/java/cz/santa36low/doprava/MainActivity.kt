@@ -487,7 +487,7 @@ class MainActivity : ComponentActivity() {
                                             InfoRow("GPS začátku", coordinates(item.startLat, item.startLon))
                                             item.startPlace?.let { InfoRow("Místo začátku", it) }
                                             InfoRow("GPS konce", coordinates(item.endLat, item.endLon))
-                                            item.endPlace?.let { InfoRow("Místo konce", it) }
+                                            if (item.type != "Výkladka") item.endPlace?.let { InfoRow("Místo konce", it) }
                                             item.company?.let { InfoRow("Firma", it) }
                                             InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
                                         }
