@@ -173,6 +173,11 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
             while (c.moveToNext()) add(PauseRecord(c.getLong(0), c.getLong(1), c.getLong(2), if (c.isNull(3)) null else c.getLong(3)))
         } }
 
+    fun fuelLitersBetween(startTime: Long, endTime: Long): Double = readableDatabase.rawQuery(
+        "SELECT COALESCE(SUM(liters), 0) FROM fuel WHERE time >= ? AND time < ?",
+        arrayOf(startTime.toString(), endTime.toString())
+    ).use { cursor -> if (cursor.moveToFirst()) cursor.getDouble(0) else 0.0 }
+
     fun addFuel(liters: Double, lat: Double?, lon: Double?) {
         val v = ContentValues().apply {
             put("liters", liters); put("time", System.currentTimeMillis())
