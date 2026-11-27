@@ -55,7 +55,7 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
     )
 
     fun active(): ActivityRecord? = readableDatabase.rawQuery(
-        "SELECT id,type,start_time,end_time,note,start_lat,start_lon,end_lat,end_lon,start_place,end_place FROM activities WHERE end_time IS NULL ORDER BY id DESC LIMIT 1", null
+        "SELECT id,type,start_time,end_time,note,start_lat,start_lon,end_lat,end_lon,start_place,end_place,company FROM activities WHERE end_time IS NULL ORDER BY id DESC LIMIT 1", null
     ).use { if (!it.moveToFirst()) null else readActivity(it) }
 
     fun start(type: String, lat: Double?, lon: Double?, place: String? = null): Long {
