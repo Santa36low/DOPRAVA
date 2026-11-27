@@ -10,7 +10,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
 
-private data class DriverVehicle(val id: String, val kind: String, val type: String, val plate: String)
+private data class DriverVehicle(
+    val id: String,
+    val kind: String,
+    val type: String,
+    val plate: String,
+    val selected: Boolean
+)
 
 @Composable
 fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
@@ -24,16 +30,51 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
     var plate by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf<DriverVehicle?>(null) }
 
+    val collection = remember(userId) {
+        userId?.let { FirebaseFirestore.getInstance().collection("users").document(it).collection("vehicles") }
+    }
+
     fun loadVehicles() {
-        if (userId == null) return
+        val ref = collection ?: return
         loading = true
-        FirebaseFirestore.getInstance().collection("users").document(userId).collection("vehicles").get()
+        ref.get()
             .addOnSuccessListener { snapshot ->
                 vehicles = snapshot.documents.map { doc ->
-                    DriverVehicle(doc.id, doc.getString("kind").orEmpty(), doc.getString("type").orEmpty(), doc.getString("plate").orEmpty())
+                    DriverVehicle(
+                        doc.id,
+                        doc.getString("kind").orEmpty(),
+                        doc.getString("type").orEmpty(),
+                        doc.getString("plate").orEmpty(),
+                        doc.getBoolean("selected") == true
+                    )
                 }.sortedBy { it.plate }
                 loading = false
                 message = ""
+            }
+            .addOnFailureListener { error ->
+                loading = false
+                message = "Vozidla se nepodařilo načíst: ${error.localizedMessage ?: "chyba"}"
+            }
+    }
+
+    fun selectVehicle(vehicle: DriverVehicle) {
+        val ref = collection ?: return
+        loading = true
+        ref.get()
+            .addOnSuccessListener { snapshot ->
+                val batch = FirebaseFirestore.getInstance().batch()
+                snapshot.documents.forEach { doc ->
+                    batch.update(doc.reference, "selected", doc.id == vehicle.id)
+                }
+                batch.commit()
+                    .addOnSuccessListener {
+                        message = "Vybrané vozidlo: ${vehicle.plate}"
+                        loadVehicles()
+                    }
+                    .addOnFailureListener { error ->
+                        loading = false
+                        message = "Výběr vozidla se nepodařil: ${error.localizedMessage ?: "chyba"}"
+                    }
             }
             .addOnFailureListener { error ->
                 loading = false
@@ -46,14 +87,14 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
     if (userId == null) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Moje vozidla", style = MaterialTheme.typography.titleLarge, color = navy)
-            Text("Nejdříve se přihlas. Vozidla se ukládají k tvému Firebase účtu a budou dostupná i po přihlášení na jiném telefonu.")
+            Text("Nejdříve se přihlas. Vozidla se ukládají k tvému Firebase účtu.")
         }
         return
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Moje vozidla", style = MaterialTheme.typography.titleLarge, color = navy)
-        Text("Vozidla jsou uložená přímo u přihlášeného účtu.")
+        Text("Zobrazují se všechna vozidla přidaná k tomuto účtu. Zeleně je označené právě vybrané vozidlo.")
         Button(onClick = {
             editingId = null
             kind = ""
@@ -67,12 +108,32 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
         if (vehicles.isEmpty() && !loading) Text("Zatím nemáš přidané žádné vozidlo.")
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 440.dp)) {
             items(vehicles, key = { it.id }) { vehicle ->
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (vehicle.selected) Color(0xFFE1F3E5) else MaterialTheme.colorScheme.surface
+                    )
+                ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(vehicle.plate, style = MaterialTheme.typography.titleLarge, color = navy)
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text(
+                                vehicle.plate,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = if (vehicle.selected) Color(0xFF16733A) else navy,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (vehicle.selected) {
+                                Text("VYBRÁNO", color = Color(0xFF16733A), style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                         Text("Druh: ${vehicle.kind}")
                         Text("Typ: ${vehicle.type}")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (!vehicle.selected) {
+                                TextButton(onClick = { selectVehicle(vehicle) }) {
+                                    Text("Vybrat", color = Color(0xFF16733A))
+                                }
+                            }
                             TextButton(onClick = {
                                 editingId = vehicle.id
                                 kind = vehicle.kind
@@ -80,18 +141,20 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                                 plate = vehicle.plate
                                 dialogOpen = true
                             }) { Text("Upravit") }
-                            TextButton(onClick = { deleting = vehicle }) { Text("Smazat", color = Color(0xFFB3261E)) }
+                            TextButton(onClick = { deleting = vehicle }) {
+                                Text("Smazat", color = Color(0xFFB3261E))
+                            }
                         }
                     }
                 }
             }
         }
-        if (message.isNotBlank()) Text(message, color = navy)
+        if (message.isNotBlank()) Text(message, color = if (message.contains("nepodařilo")) Color(0xFFB3261E) else navy)
     }
 
     if (dialogOpen) {
         AlertDialog(
-            onDismissRequest = { dialogOpen = false },
+            onDismissRequest = { if (!loading) dialogOpen = false },
             title = { Text(if (editingId == null) "Přidat vozidlo" else "Upravit vozidlo") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -101,15 +164,28 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                 }
             },
             confirmButton = {
-                TextButton(enabled = kind.isNotBlank() && type.isNotBlank() && plate.isNotBlank(), onClick = {
+                TextButton(enabled = !loading && kind.isNotBlank() && type.isNotBlank() && plate.isNotBlank(), onClick = {
+                    val ref = collection ?: return@TextButton
                     val id = editingId ?: java.util.UUID.randomUUID().toString()
-                    val data = mapOf("kind" to kind.trim(), "type" to type.trim(), "plate" to plate.trim().uppercase())
+                    val wasSelected = vehicles.firstOrNull { it.id == id }?.selected == true
+                    val shouldSelect = wasSelected || (editingId == null && vehicles.none { it.selected })
+                    val data = mapOf(
+                        "kind" to kind.trim(),
+                        "type" to type.trim(),
+                        "plate" to plate.trim().uppercase(),
+                        "selected" to shouldSelect
+                    )
                     loading = true
-                    FirebaseFirestore.getInstance().collection("users").document(userId).collection("vehicles").document(id).set(data)
-                        .addOnSuccessListener { dialogOpen = false; loadVehicles() }
+                    message = "Ukládám vozidlo…"
+                    ref.document(id).set(data)
+                        .addOnSuccessListener {
+                            dialogOpen = false
+                            message = "Vozidlo bylo uloženo."
+                            loadVehicles()
+                        }
                         .addOnFailureListener { error ->
                             loading = false
-                            message = "Vozidlo se nepodařilo uložit: ${error.localizedMessage ?: "chyba"}"
+                            message = "Vozidlo se nepodařilo uložit: ${error.localizedMessage ?: "chyba"}. Zkontroluj také publikovaná pravidla Firestore."
                         }
                 }) { Text("Uložit") }
             },
@@ -124,9 +200,15 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
             text = { Text("Opravdu chceš smazat vozidlo ${vehicle.plate}?") },
             confirmButton = {
                 TextButton(onClick = {
-                    FirebaseFirestore.getInstance().collection("users").document(userId).collection("vehicles").document(vehicle.id).delete()
-                        .addOnSuccessListener { deleting = null; loadVehicles() }
-                        .addOnFailureListener { error ->
+                    collection?.document(vehicle.id)?.delete()
+                        ?.addOnSuccessListener {
+                            deleting = null
+                            if (vehicle.selected) {
+                                val next = vehicles.firstOrNull { it.id != vehicle.id }
+                                if (next != null) selectVehicle(next) else loadVehicles()
+                            } else loadVehicles()
+                        }
+                        ?.addOnFailureListener { error ->
                             deleting = null
                             message = "Vozidlo se nepodařilo smazat: ${error.localizedMessage ?: "chyba"}"
                         }
