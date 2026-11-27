@@ -8,6 +8,29 @@ import java.net.URL
 data class NearbyPlace(val name: String, val address: String)
 
 object PlaceLookup {
+    fun reverseGeocode(latitude: Double, longitude: Double): String? {
+        val url = URL("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$latitude&lon=$longitude&zoom=18&addressdetails=1")
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 5000
+            readTimeout = 9000
+            requestMethod = "GET"
+            setRequestProperty("User-Agent", "DopravaAndroid/1.0 (personal activity log)")
+        }
+        return try {
+            val address = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                .optJSONObject("address") ?: return null
+            val city = listOf("city", "town", "village", "municipality", "county").firstNotNullOfOrNull { key ->
+                address.optString(key).takeIf { it.isNotBlank() }
+            }
+            val road = address.optString("road").takeIf { it.isNotBlank() }
+            val house = address.optString("house_number").takeIf { it.isNotBlank() }
+            val street = if (road != null) road + (house?.let { " $it" } ?: "") else null
+            listOfNotNull(street, city).distinct().joinToString(", ").ifBlank { null }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     fun search(latitude: Double, longitude: Double): List<NearbyPlace> {
         val query = """[out:json][timeout:12];(nwr(around:800,$latitude,$longitude)["name"]["shop"];nwr(around:800,$latitude,$longitude)["name"]["office"];nwr(around:800,$latitude,$longitude)["name"]["industrial"];nwr(around:800,$latitude,$longitude)["name"]["craft"];nwr(around:800,$latitude,$longitude)["name"]["amenity"];nwr(around:800,$latitude,$longitude)["name"]["landuse"="industrial"];nwr(around:800,$latitude,$longitude)["name"]["building"~"commercial|industrial|warehouse"];);out center tags 30;"""
         val url = URL("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(query, "UTF-8"))
