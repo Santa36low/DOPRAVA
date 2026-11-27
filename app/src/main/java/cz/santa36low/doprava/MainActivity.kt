@@ -432,7 +432,15 @@ class MainActivity : ComponentActivity() {
                 ModalDrawerSheet {
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                        label = { Text("Nastavení") },
+                        label = { Text("Přihlásit") },
+                        selected = false,
+                        enabled = false,
+                        onClick = { },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.Inventory2, contentDescription = null) },
+                        label = { Text("Záloha") },
                         selected = page == 3,
                         onClick = {
                             page = 3
