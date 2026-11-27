@@ -18,12 +18,12 @@ class RouteTrackingService : Service() {
         super.onCreate()
         client = LocationServices.getFusedLocationProviderClient(this)
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel("route_tracking","Záznam jízdy",NotificationManager.IMPORTANCE_LOW))
+        if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel("route_tracking","Záznam trasy",NotificationManager.IMPORTANCE_LOW))
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val id = intent?.getLongExtra("activity_id", -1L) ?: -1L
-        val notification: Notification = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this,"route_tracking").setContentTitle("Doprava").setContentText("Zaznamenávám trasu jízdy").setSmallIcon(android.R.drawable.ic_menu_mylocation).build()
-        else Notification.Builder(this).setContentTitle("Doprava").setContentText("Zaznamenávám trasu jízdy").setSmallIcon(android.R.drawable.ic_menu_mylocation).build()
+        val notification: Notification = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this,"route_tracking").setContentTitle("Doprava").setContentText("Zaznamenávám trasu činnosti").setSmallIcon(android.R.drawable.ic_menu_mylocation).build()
+        else Notification.Builder(this).setContentTitle("Doprava").setContentText("Zaznamenávám trasu činnosti").setSmallIcon(android.R.drawable.ic_menu_mylocation).build()
         startForeground(21, notification)
         if (id > 0 && callback == null) {
             val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 20000).setMinUpdateDistanceMeters(40f).build()
