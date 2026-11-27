@@ -61,25 +61,19 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
     fun selectVehicle(vehicle: DriverVehicle) {
         val ref = collection ?: return
         loading = true
-        ref.get()
-            .addOnSuccessListener { snapshot ->
-                val batch = FirebaseFirestore.getInstance().batch()
-                snapshot.documents.forEach { doc ->
-                    batch.update(doc.reference, "selected", doc.id == vehicle.id)
-                }
-                batch.commit()
-                    .addOnSuccessListener {
-                        message = "Vybrané vozidlo: ${vehicle.plate}"
-                        loadVehicles()
-                    }
-                    .addOnFailureListener { error ->
-                        loading = false
-                        message = "Výběr vozidla se nepodařil: ${error.localizedMessage ?: "chyba"}"
-                    }
+        val batch = FirebaseFirestore.getInstance().batch()
+        vehicles.filter { it.selected || it.id == vehicle.id }.forEach { item ->
+            batch.update(ref.document(item.id), "selected", item.id == vehicle.id)
+        }
+        batch.commit()
+            .addOnSuccessListener {
+                vehicles = vehicles.map { it.copy(selected = it.id == vehicle.id) }
+                loading = false
+                message = "Vybrané vozidlo: ${vehicle.plate}"
             }
             .addOnFailureListener { error ->
                 loading = false
-                message = "Vozidla se nepodařilo načíst: ${error.localizedMessage ?: "chyba"}"
+                message = "Výběr vozidla se nepodařil: ${error.localizedMessage ?: "chyba"}"
             }
     }
 
@@ -192,9 +186,17 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                     message = ""
                     ref.document(id).set(data)
                         .addOnSuccessListener {
+                            val savedVehicle = DriverVehicle(
+                                id = id,
+                                kind = kind.trim(),
+                                type = type.trim(),
+                                plate = plate.trim().uppercase(),
+                                selected = shouldSelect
+                            )
+                            vehicles = (vehicles.filterNot { it.id == id } + savedVehicle).sortedBy { it.plate }
                             savingVehicle = false
+                            loading = false
                             message = "Vozidlo bylo uloženo."
-                            loadVehicles()
                         }
                         .addOnFailureListener { error ->
                             savingVehicle = false
