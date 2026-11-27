@@ -39,6 +39,15 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         if (oldVersion < 5) db.execSQL("ALTER TABLE activities ADD COLUMN company TEXT")
     }
 
+    // Zajistí přesun všech potvrzených změn z WAL do hlavního souboru před exportem.
+    fun checkpointForBackup() {
+        writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { cursor ->
+            if (cursor.moveToFirst() && cursor.getInt(0) != 0) {
+                throw IllegalStateException("Databázi se nepodařilo bezpečně připravit k záloze")
+            }
+        }
+    }
+
     private fun readActivity(c: android.database.Cursor) = ActivityRecord(
         id = c.getLong(0),
         type = c.getString(1),
