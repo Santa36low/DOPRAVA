@@ -1338,7 +1338,6 @@ class MainActivity : ComponentActivity() {
                     if (accountVehiclePlates.isNotBlank()) {
                         Text(accountVehiclePlates, color = Color(0xFFFFD166), style = MaterialTheme.typography.labelMedium)
                     }
-                    Text(currentUser?.email ?: "", color = Color(0xFFB9C9DA), style = MaterialTheme.typography.labelSmall)
                     Row(Modifier.fillMaxWidth().clickable {
                         accountName = currentUser?.displayName.orEmpty()
                         accountEmail = currentUser?.email.orEmpty()
@@ -1379,7 +1378,7 @@ class MainActivity : ComponentActivity() {
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(Icons.Filled.Inventory2, contentDescription = null, tint = Color.White)
-                    Text("Synchronizace", color = Color.White)
+                    Text("Záloha", color = Color.White)
                 }
             }
         }
