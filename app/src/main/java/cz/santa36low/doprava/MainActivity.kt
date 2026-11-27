@@ -625,7 +625,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                         }
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                                             IconButton(onClick = {
                                                 editingItem = item
                                                 editType = item.type
@@ -636,6 +636,7 @@ class MainActivity : ComponentActivity() {
                                                 editCompany = item.company ?: ""
                                                 editNote = item.note
                                             }) { Icon(Icons.Filled.Edit, contentDescription = "Upravit záznam", tint = blue) }
+                                            Spacer(Modifier.width(72.dp))
                                             IconButton(onClick = { deletingItem = item }) {
                                                 Icon(Icons.Filled.Delete, contentDescription = "Smazat záznam", tint = Color(0xFFC92D35))
                                             }
