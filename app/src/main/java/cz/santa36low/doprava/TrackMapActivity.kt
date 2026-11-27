@@ -1,41 +1,58 @@
 package cz.santa36low.doprava
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import org.json.JSONArray
-import org.json.JSONObject
+import android.widget.Toast
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 class TrackMapActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         val activityId = intent.getLongExtra("activity_id", -1L)
         val points = Database(this).routePoints(activityId)
-        val json = JSONArray()
-        points.forEach { point ->
-            json.put(JSONObject().put("lat", point.latitude).put("lon", point.longitude))
+        if (points.size < 2) {
+            Toast.makeText(this, "Pro tuto jízdu není zaznamenána úplná GPS trasa.", Toast.LENGTH_LONG).show()
+            finish()
+            return
         }
-        val web = WebView(this)
-        web.settings.javaScriptEnabled = true
-        web.settings.domStorageEnabled = true
-        web.webViewClient = WebViewClient()
-        setContentView(web)
-        val data = json.toString()
-        val html = """
-            <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-            <style>html,body,#map{height:100%;margin:0;font-family:Arial}#msg{position:absolute;z-index:1000;top:12px;left:12px;right:12px;background:white;padding:10px;border-radius:8px;box-shadow:0 1px 5px #888}</style>
-            </head><body><div id="map"></div><div id="msg">Trasa jízdy · OpenStreetMap</div>
-            <script>
-            const pts=$data.map(p=>[p.lat,p.lon]);
-            const map=L.map('map');
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-            if(pts.length){const line=L.polyline(pts,{color:'#14558a',weight:5}).addTo(map);L.marker(pts[0]).addTo(map).bindPopup('Začátek');L.marker(pts[pts.length-1]).addTo(map).bindPopup('Konec');map.fitBounds(line.getBounds(),{padding:[25,25]});}
-            else {map.setView([49.8,15.5],7);document.getElementById('msg').innerText='Pro tuto jízdu zatím není zaznamenaná GPS trasa.';}
-            </script></body></html>
-        """.trimIndent()
-        web.loadDataWithBaseURL("https://www.openstreetmap.org/", html, "text/html", "UTF-8", null)
+
+        // Google Maps URL accepts a limited number of intermediate waypoints.
+        // Keep the first and last GPS point and sample the recorded track between them.
+        val middle = points.drop(1).dropLast(1)
+        val maxWaypoints = 8
+        val waypoints = if (middle.size <= maxWaypoints) {
+            middle
+        } else {
+            (0 until maxWaypoints).map { index ->
+                middle[(index.toLong() * (middle.size - 1) / (maxWaypoints - 1)).toInt()]
+            }
+        }
+        fun coordinate(point: RoutePoint): String =
+            "${point.latitude},${point.longitude}"
+        fun encode(value: String): String =
+            URLEncoder.encode(value, StandardCharsets.UTF_8.name())
+
+        val origin = coordinate(points.first())
+        val destination = coordinate(points.last())
+        val waypointParam = waypoints.takeIf { it.isNotEmpty() }
+            ?.joinToString("|") { coordinate(it) }
+        val url = buildString {
+            append("https://www.google.com/maps/dir/?api=1")
+            append("&origin=").append(encode(origin))
+            append("&destination=").append(encode(destination))
+            append("&travelmode=driving")
+            if (waypointParam != null) append("&waypoints=").append(encode(waypointParam))
+        }
+
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Google Mapy se nepodařilo otevřít.", Toast.LENGTH_LONG).show()
+        }
+        finish()
     }
 }
