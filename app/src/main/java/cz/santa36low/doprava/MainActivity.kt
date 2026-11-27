@@ -3,7 +3,6 @@ package cz.santa36low.doprava
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -181,23 +180,14 @@ class MainActivity : ComponentActivity() {
                 title = { Text("Firma při výkladce") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if (placeLoading) "Hledám firmy v okolí konečné GPS…" else if (placeResults.isEmpty()) "V okolí nebyla nalezena firma. Můžeš ji dopsat ručně." else "Vyber správnou firmu:")
+                        Text(if (placeLoading) "Hledám firmy v okolí konečné GPS…" else if (placeResults.isEmpty()) "V okolí nebyla nalezena firma. Můžeš ji dopsat ručně." else "Vyber správnou firmu. Pokud je špatně, zvol jinou nebo ji napiš ručně:")
                         placeResults.forEach { place ->
                             TextButton(onClick = { completePlace(if (place.address.isBlank()) place.name else place.name + ", " + place.address) }) {
                                 Text(if (place.address.isBlank()) place.name else place.name + " · " + place.address)
                             }
                         }
                         OutlinedTextField(value = manualPlace, onValueChange = { manualPlace = it }, label = { Text("Ruční zadání názvu / adresy") }, singleLine = true)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = {
-                                val url = "https://www.openstreetmap.org/?mlat=" + pendingLatitude + "&mlon=" + pendingLongitude + "#map=17/" + pendingLatitude + "/" + pendingLongitude
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            }) { Text("Mapa") }
-                            TextButton(onClick = {
-                                val query = if (manualPlace.isNotBlank()) manualPlace else pendingLatitude.toString() + "," + pendingLongitude.toString()
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/search?query=" + Uri.encode(query))))
-                            }) { Text("Vyhledávání") }
-                        }
+                        Text("Data firem: © OpenStreetMap contributors", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                     }
                 },
                 confirmButton = { TextButton(onClick = { completePlace(manualPlace.trim().ifBlank { null }) }, enabled = manualPlace.isNotBlank()) { Text("Použít ruční zadání") } },
