@@ -852,7 +852,7 @@ class MainActivity : ComponentActivity() {
                         ) { Text("Obnovit ze souboru") }
                         if (active != null) Text("Před vytvořením nebo obnovením zálohy ukonči probíhající činnost.", color = Color(0xFF9A5B00))
                         if (backupMessage.isNotBlank()) Text(backupMessage, color = navy)
-                    }} else if (page == 0) {
+                    } else if (page == 0) {
                         (activities + listOf("Pauza" to Icons.Filled.Coffee)).chunked(2).forEach { pair ->
                             Row(
                                 Modifier.fillMaxWidth(),
