@@ -434,9 +434,12 @@ class MainActivity : ComponentActivity() {
                         icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                         label = { Text("Přihlásit") },
                         selected = false,
-                        enabled = false,
                         onClick = { },
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        )
                     )
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Filled.Inventory2, contentDescription = null) },
