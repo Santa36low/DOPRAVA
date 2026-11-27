@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
         var cloudBusy by remember { mutableStateOf(false) }
         val firebaseAuth = remember { FirebaseAuth.getInstance() }
         var currentUser by remember { mutableStateOf(firebaseAuth.currentUser) }
+        var accountVehiclePlates by remember { mutableStateOf("") }
         var authDialogVisible by remember { mutableStateOf(false) }
         var authRegisterMode by remember { mutableStateOf(false) }
         var authEmail by remember { mutableStateOf("") }
@@ -164,9 +165,21 @@ class MainActivity : ComponentActivity() {
         }
 
         LaunchedEffect(currentUser?.uid) {
-            currentUser?.let { user ->
+            val user = currentUser
+            if (user == null) {
+                accountVehiclePlates = ""
+            } else {
                 accountName = user.displayName.orEmpty()
                 accountEmail = user.email.orEmpty()
+                com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    .collection("users").document(user.uid).collection("vehicles")
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        accountVehiclePlates = snapshot.documents
+                            .mapNotNull { it.getString("plate")?.takeIf { plate -> plate.isNotBlank() } }
+                            .distinct().sorted().joinToString(" · ")
+                    }
+                    .addOnFailureListener { accountVehiclePlates = "" }
             }
         }
 
@@ -1321,7 +1334,10 @@ class MainActivity : ComponentActivity() {
                         Text("Registrace", color = Color.White)
                     }
                 } else {
-                    Text(currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Řidič", color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(vertical = 6.dp))
+                    Text(currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Řidič", color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 6.dp))
+                    if (accountVehiclePlates.isNotBlank()) {
+                        Text(accountVehiclePlates, color = Color(0xFFFFD166), style = MaterialTheme.typography.labelMedium)
+                    }
                     Text(currentUser?.email ?: "", color = Color(0xFFB9C9DA), style = MaterialTheme.typography.labelSmall)
                     Row(Modifier.fillMaxWidth().clickable {
                         accountName = currentUser?.displayName.orEmpty()
