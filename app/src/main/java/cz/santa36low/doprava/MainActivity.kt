@@ -3,6 +3,8 @@ package cz.santa36low.doprava
 import android.Manifest
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.net.Uri
+import java.io.File
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -69,6 +71,9 @@ class MainActivity : ComponentActivity() {
         var historyMode by remember { mutableStateOf("Den") }
         var selectedType by remember { mutableStateOf("Jízda") }
         var page by remember { mutableStateOf(0) }
+        var backupMessage by remember { mutableStateOf("") }
+        var showRestoreConfirm by remember { mutableStateOf(false) }
+        var pendingBackupUri by remember { mutableStateOf<Uri?>(null) }
         var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
         var fuelText by remember { mutableStateOf("") }
         var placeDialogVisible by remember { mutableStateOf(false) }
@@ -88,6 +93,32 @@ class MainActivity : ComponentActivity() {
         var editEndPlace by remember { mutableStateOf("") }
         var editCompany by remember { mutableStateOf("") }
         var editNote by remember { mutableStateOf("") }
+
+        val exportBackupLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("application/octet-stream")
+        ) { uri ->
+            if (uri != null) {
+                try {
+                    db.close()
+                    val source = getDatabasePath("doprava.db")
+                    contentResolver.openOutputStream(uri)?.use { output -> source.inputStream().use { it.copyTo(output) } }
+                        ?: throw IllegalStateException("Soubor se nepodařilo vytvořit")
+                    db = Database(this)
+                    backupMessage = "Záloha byla úspěšně uložena. Uchovej ji mimo telefon."
+                } catch (e: Exception) {
+                    db = Database(this)
+                    backupMessage = "Zálohu se nepodařilo uložit: ${e.localizedMessage ?: "chyba"}"
+                }
+            }
+        }
+        val importBackupLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            if (uri != null) {
+                pendingBackupUri = uri
+                showRestoreConfirm = true
+            }
+        }
 
         val permissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
@@ -239,6 +270,42 @@ class MainActivity : ComponentActivity() {
         val pageBg = Color(0xFFF0F3F8)
         val activityIcon = Color(0xFF0B4A78)
 
+        if (showRestoreConfirm) {
+            AlertDialog(
+                onDismissRequest = { showRestoreConfirm = false; pendingBackupUri = null },
+                title = { Text("Obnovit zálohu?") },
+                text = { Text("Současná data v aplikaci budou nahrazena obsahem vybraného souboru. Pokračovat?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showRestoreConfirm = false
+                        val uri = pendingBackupUri
+                        pendingBackupUri = null
+                        if (uri != null) {
+                            try {
+                                val temp = File(cacheDir, "restore-doprava.db")
+                                contentResolver.openInputStream(uri)?.use { input -> temp.outputStream().use { input.copyTo(it) } }
+                                    ?: throw IllegalStateException("Soubor nelze přečíst")
+                                val header = temp.inputStream().use { ByteArray(16).also { bytes -> it.read(bytes) } }
+                                if (String(header, Charsets.US_ASCII) != "SQLite format 3\\u0000") throw IllegalArgumentException("Vybraný soubor není platná záloha aplikace Doprava")
+                                db.close()
+                                val databaseFile = getDatabasePath("doprava.db")
+                                File(databaseFile.path + "-wal").delete()
+                                File(databaseFile.path + "-shm").delete()
+                                if (!temp.copyTo(databaseFile, overwrite = true).exists()) throw IllegalStateException("Obnova se nezdařila")
+                                db = Database(this@MainActivity)
+                                refresh()
+                                backupMessage = "Záloha byla úspěšně obnovena."
+                            } catch (e: Exception) {
+                                db = Database(this@MainActivity)
+                                backupMessage = "Obnovu se nepodařilo dokončit: ${e.localizedMessage ?: "chyba"}"
+                            }
+                        }
+                    }) { Text("Obnovit") }
+                },
+                dismissButton = { TextButton(onClick = { showRestoreConfirm = false; pendingBackupUri = null }) { Text("Zrušit") } }
+            )
+        }
+
         if (placeDialogVisible) {
             AlertDialog(
                 onDismissRequest = { /* Firma je pro nakládku/vykládku povinná. */ },
@@ -351,6 +418,14 @@ class MainActivity : ComponentActivity() {
                         colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
                             indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
                     )
+                    NavigationBarItem(
+                        selected = page == 3,
+                        onClick = { page = 3 },
+                        icon = { Icon(Icons.Filled.Settings, contentDescription = "Záloha", modifier = Modifier.size(26.dp)) },
+                        label = { Text("Záloha") },
+                        colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
+                            indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
+                    )
                 }
             }
         ) { padding ->
@@ -394,7 +469,18 @@ class MainActivity : ComponentActivity() {
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (page == 0) {
+                    if (page == 3) {
+                        Text("Záloha a obnova dat", style = MaterialTheme.typography.titleLarge, color = navy)
+                        Text("Uložení zálohy vytvoří soubor se všemi záznamy, GPS trasami, pauzami a tankováním. Soubor můžeš přenést do nové instalace aplikace.")
+                        Button(onClick = { exportBackupLauncher.launch("Doprava-zaloha.db") }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = blue)) {
+                            Text("Uložit zálohu")
+                        }
+                        OutlinedButton(onClick = { importBackupLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Obnovit ze zálohy")
+                        }
+                        Text("Pozor: obnovení nahradí současnou historii obsahem záložního souboru. Před obnovou si případně nejprve ulož aktuální zálohu.", color = Color(0xFF9A5B00))
+                        if (backupMessage.isNotBlank()) Text(backupMessage, color = navy)
+                    } else if (page == 0) {
                         (activities + listOf("Pauza" to Icons.Filled.Coffee)).chunked(2).forEach { pair ->
                             Row(
                                 Modifier.fillMaxWidth(),
