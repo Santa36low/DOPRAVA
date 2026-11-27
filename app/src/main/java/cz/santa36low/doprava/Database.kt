@@ -69,6 +69,11 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         return writableDatabase.insert("activities", null, v)
     }
 
+    fun updateStartLocation(id: Long, lat: Double, lon: Double) {
+        val v = ContentValues().apply { put("start_lat", lat); put("start_lon", lon) }
+        writableDatabase.update("activities", v, "id=?", arrayOf(id.toString()))
+    }
+
     fun finish(id: Long, lat: Double?, lon: Double?, place: String? = null, company: String? = null, endTime: Long = System.currentTimeMillis()) {
         val v = ContentValues().apply {
             put("end_time", endTime)
