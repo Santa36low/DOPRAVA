@@ -1,6 +1,7 @@
 package cz.santa36low.doprava
 
 import android.Manifest
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -63,6 +64,7 @@ class MainActivity : ComponentActivity() {
         var history by remember { mutableStateOf(db.history()) }
         var pause by remember { mutableStateOf(db.activePause()) }
         var selectedDay by remember { mutableLongStateOf(System.currentTimeMillis()) }
+        var historyMode by remember { mutableStateOf("Den") }
         var selectedType by remember { mutableStateOf("Jízda") }
         var page by remember { mutableStateOf(0) }
         var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -467,13 +469,82 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     } else if (page == 1) {
+                        val periodCalendar = Calendar.getInstance().apply {
+                            timeInMillis = selectedDay
+                            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                            when (historyMode) {
+                                "Týden" -> {
+                                    val offset = (get(Calendar.DAY_OF_WEEK) + 5) % 7
+                                    add(Calendar.DAY_OF_MONTH, -offset)
+                                }
+                                "Měsíc" -> set(Calendar.DAY_OF_MONTH, 1)
+                            }
+                        }
+                        val periodStart = periodCalendar.timeInMillis
+                        val periodEnd = Calendar.getInstance().apply {
+                            timeInMillis = periodStart
+                            when (historyMode) {
+                                "Den" -> add(Calendar.DAY_OF_MONTH, 1)
+                                "Týden" -> add(Calendar.DAY_OF_MONTH, 7)
+                                else -> add(Calendar.MONTH, 1)
+                            }
+                        }.timeInMillis
+                        val filteredHistory = history.filter { it.start < periodEnd && (it.end ?: tick) >= periodStart }
+                        val periodLabel = when (historyMode) {
+                            "Den" -> dateOnly(periodStart)
+                            "Týden" -> dateOnly(periodStart) + " – " + dateOnly(periodEnd - 1)
+                            else -> SimpleDateFormat("LLLL yyyy", Locale.getDefault()).format(Date(periodStart))
+                        }
                         Text("Historie činností", style = MaterialTheme.typography.titleLarge, color = navy)
-                        if (history.isEmpty()) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("Den", "Týden", "Měsíc").forEach { mode ->
+                                FilterChip(
+                                    selected = historyMode == mode,
+                                    onClick = { historyMode = mode },
+                                    label = { Text(mode) }
+                                )
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("‹", modifier = Modifier.clickable {
+                                val c = Calendar.getInstance().apply { timeInMillis = selectedDay }
+                                when (historyMode) {
+                                    "Den" -> c.add(Calendar.DAY_OF_MONTH, -1)
+                                    "Týden" -> c.add(Calendar.DAY_OF_MONTH, -7)
+                                    else -> c.add(Calendar.MONTH, -1)
+                                }
+                                selectedDay = c.timeInMillis
+                            }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
+                            Text(
+                                periodLabel,
+                                modifier = Modifier.clickable {
+                                    val c = Calendar.getInstance().apply { timeInMillis = selectedDay }
+                                    DatePickerDialog(this@MainActivity, { _, year, month, day ->
+                                        selectedDay = Calendar.getInstance().apply {
+                                            set(year, month, day, 12, 0, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }.timeInMillis
+                                    }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
+                                }.padding(8.dp),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = navy
+                            )
+                            Text("›", modifier = Modifier.clickable {
+                                val c = Calendar.getInstance().apply { timeInMillis = selectedDay }
+                                when (historyMode) {
+                                    "Den" -> c.add(Calendar.DAY_OF_MONTH, 1)
+                                    "Týden" -> c.add(Calendar.DAY_OF_MONTH, 7)
+                                    else -> c.add(Calendar.MONTH, 1)
+                                }
+                                selectedDay = c.timeInMillis
+                            }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
+                        }
+                        if (filteredHistory.isEmpty()) {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                                 Text("Zatím tu nejsou žádné záznamy.", Modifier.padding(18.dp))
                             }
                         } else {
-                            history.forEach { item ->
+                            filteredHistory.forEach { item ->
                                 val itemIcon = activities.firstOrNull { it.first == item.type }?.second ?: Icons.Filled.LocalShipping
                                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color.White)) {
