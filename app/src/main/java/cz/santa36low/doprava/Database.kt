@@ -58,12 +58,13 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         "SELECT id,type,start_time,end_time,note,start_lat,start_lon,end_lat,end_lon,start_place,end_place,company FROM activities WHERE end_time IS NULL ORDER BY id DESC LIMIT 1", null
     ).use { if (!it.moveToFirst()) null else readActivity(it) }
 
-    fun start(type: String, lat: Double?, lon: Double?, place: String? = null): Long {
+    fun start(type: String, lat: Double?, lon: Double?, place: String? = null, company: String? = null): Long {
         val v = ContentValues().apply {
             put("type", type); put("start_time", System.currentTimeMillis())
             if (lat != null) put("start_lat", lat)
             if (lon != null) put("start_lon", lon)
             if (!place.isNullOrBlank()) put("start_place", place)
+            if (!company.isNullOrBlank()) put("company", company)
         }
         return writableDatabase.insert("activities", null, v)
     }
