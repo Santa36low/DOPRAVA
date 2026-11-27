@@ -23,7 +23,8 @@ class TrackMapActivity : Activity() {
         // Google Maps URL accepts a limited number of intermediate waypoints.
         // Keep the first and last GPS point and sample the recorded track between them.
         val middle = points.drop(1).dropLast(1)
-        val maxWaypoints = 8
+        // Google Maps URLs support up to three intermediate stops reliably in the mobile app.
+        val maxWaypoints = 3
         val waypoints = if (middle.size <= maxWaypoints) {
             middle
         } else {
@@ -31,7 +32,7 @@ class TrackMapActivity : Activity() {
                 middle[(index.toLong() * (middle.size - 1) / (maxWaypoints - 1)).toInt()]
             }
         }
-        fun coordinate(point: RoutePoint): String =
+        fun coordinate(point: Database.RoutePoint): String =
             "${point.latitude},${point.longitude}"
         fun encode(value: String): String =
             URLEncoder.encode(value, StandardCharsets.UTF_8.name())
