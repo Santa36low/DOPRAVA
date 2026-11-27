@@ -106,10 +106,14 @@ class MainActivity : ComponentActivity() {
         ) { uri ->
             if (uri != null) {
                 try {
+                    db.checkpointForBackup()
                     db.close()
                     val source = getDatabasePath("doprava.db")
-                    contentResolver.openOutputStream(uri)?.use { output -> source.inputStream().use { it.copyTo(output) } }
-                        ?: throw IllegalStateException("Soubor se nepodařilo vytvořit")
+                    if (!source.exists() || source.length() == 0L) throw IllegalStateException("Databázový soubor je prázdný")
+                    contentResolver.openOutputStream(uri)?.use { output ->
+                        source.inputStream().use { it.copyTo(output) }
+                        output.flush()
+                    } ?: throw IllegalStateException("Soubor se nepodařilo vytvořit")
                     db = Database(this)
                     backupMessage = "Záloha byla úspěšně uložena. Uchovej ji mimo telefon."
                 } catch (e: Exception) {
@@ -304,14 +308,39 @@ class MainActivity : ComponentActivity() {
                                     ?: throw IllegalStateException("Soubor nelze přečíst")
                                 val header = temp.inputStream().use { ByteArray(16).also { bytes -> it.read(bytes) } }
                                 if (String(header, 0, 15, Charsets.US_ASCII) != "SQLite format 3" || header[15].toInt() != 0) throw IllegalArgumentException("Vybraný soubor není platná záloha aplikace Doprava")
+
+                                // Nejdřív ověříme integritu i kompletní strukturu zálohy.
+                                android.database.sqlite.SQLiteDatabase.openDatabase(
+                                    temp.absolutePath, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+                                ).use { backupDb ->
+                                    val integrity = backupDb.rawQuery("PRAGMA integrity_check", null).use { c ->
+                                        if (c.moveToFirst()) c.getString(0) else ""
+                                    }
+                                    if (integrity != "ok") throw IllegalArgumentException("Záloha je poškozená ($integrity)")
+                                    val requiredTables = setOf("activities", "fuel", "route_points", "pauses")
+                                    val tables = backupDb.rawQuery(
+                                        "SELECT name FROM sqlite_master WHERE type='table'", null
+                                    ).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
+                                    if (!tables.containsAll(requiredTables)) throw IllegalArgumentException("Soubor neobsahuje všechna data aplikace Doprava")
+                                    val columns = backupDb.rawQuery("PRAGMA table_info(activities)", null).use { c ->
+                                        buildSet { while (c.moveToNext()) add(c.getString(1)) }
+                                    }
+                                    if (!columns.containsAll(setOf("company", "note", "start_place", "end_place"))) {
+                                        throw IllegalArgumentException("Záloha pochází ze starší nebo nekompatibilní verze aplikace")
+                                    }
+                                }
+
+                                stopService(Intent(this@MainActivity, RouteTrackingService::class.java))
                                 db.close()
                                 val databaseFile = getDatabasePath("doprava.db")
                                 File(databaseFile.path + "-wal").delete()
                                 File(databaseFile.path + "-shm").delete()
+                                File(databaseFile.path + "-journal").delete()
                                 if (!temp.copyTo(databaseFile, overwrite = true).exists()) throw IllegalStateException("Obnova se nezdařila")
                                 db = Database(this@MainActivity)
                                 refresh()
-                                backupMessage = "Záloha byla úspěšně obnovena."
+                                page = 1
+                                backupMessage = "Záloha byla úspěšně obnovena. Načteno záznamů: ${history.size}."
                             } catch (e: Exception) {
                                 db = Database(this@MainActivity)
                                 backupMessage = "Obnovu se nepodařilo dokončit: ${e.localizedMessage ?: "chyba"}"
