@@ -19,7 +19,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
 }
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.2.0"))
@@ -36,4 +35,10 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("org.maplibre.gl:android-sdk:11.8.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
 }
