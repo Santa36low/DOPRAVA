@@ -171,17 +171,24 @@ class MainActivity : ComponentActivity() {
         fun startSelected() {
             if (active != null) return
             val startedAt = System.currentTimeMillis()
-            withLocation { lat, lon ->
-                val begin: (String?) -> Unit = { companyName ->
-                    val id = db.start(selectedType, lat, lon, null, companyName, startedAt)
-                    if (selectedType != "Pauza" && lat != null && lon != null) db.addRoutePoint(id, lat, lon)
-                    if (selectedType != "Pauza" && hasLocation()) {
-                        try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
-                    } else stopService(Intent(this, RouteTrackingService::class.java))
-                    refresh()
+            // Záznam vytvoříme hned po stisku, GPS nesmí zdržovat zobrazení činnosti.
+            val id = db.start(selectedType, null, null, null, null, startedAt)
+            refresh()
+            if (selectedType != "Pauza") {
+                if (hasLocation()) {
+                    try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
+                    withLocation { lat, lon ->
+                        if (lat != null && lon != null) {
+                            db.updateStartLocation(id, lat, lon)
+                            db.addRoutePoint(id, lat, lon, startedAt)
+                            refresh()
+                        }
+                    }
+                } else {
+                    permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                 }
-                if (selectedType == "Nákladka") askForPlace(lat, lon, "Potvrzení firmy při nákladce", begin)
-                else begin(null)
+            } else {
+                stopService(Intent(this, RouteTrackingService::class.java))
             }
         }
 
@@ -192,11 +199,14 @@ class MainActivity : ComponentActivity() {
             withLocation { lat, lon ->
                 val save: (String?) -> Unit = { companyName ->
                     if (current.type != "Pauza" && lat != null && lon != null) db.addRoutePoint(current.id, lat, lon)
-                    db.finish(current.id, lat, lon, companyName, if (current.type == "Výkladka") companyName else null, endedAt)
+                    db.finish(current.id, lat, lon, null, companyName, endedAt)
                     stopService(Intent(this, RouteTrackingService::class.java))
                     refresh()
                 }
-                if (current.type == "Výkladka") askForPlace(lat, lon, "Potvrzení firmy při výkladce", save) else save(null)
+                if (current.type == "Výkladka" || current.type == "Nákladka") {
+                    val title = if (current.type == "Nákladka") "Potvrzení firmy při nákladce" else "Potvrzení firmy při výkladce"
+                    askForPlace(lat, lon, title, save)
+                } else save(null)
             }
         }
 
@@ -208,7 +218,7 @@ class MainActivity : ComponentActivity() {
 
         if (placeDialogVisible) {
             AlertDialog(
-                onDismissRequest = { completePlace(null) },
+                onDismissRequest = { /* Firma je pro nakládku/vykládku povinná. */ },
                 title = { Text(placeDialogTitle) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -223,7 +233,7 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 confirmButton = { TextButton(onClick = { completePlace(manualPlace.trim().ifBlank { null }) }, enabled = manualPlace.isNotBlank()) { Text("Potvrdit firmu") } },
-                dismissButton = { TextButton(onClick = { completePlace(null) }) { Text("Bez firmy") } }
+                dismissButton = { }
             )
         }
 
