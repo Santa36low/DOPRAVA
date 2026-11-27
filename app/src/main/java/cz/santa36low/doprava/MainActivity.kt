@@ -233,7 +233,10 @@ class MainActivity : ComponentActivity() {
                 text = { Text("Opravdu chceš smazat celý záznam včetně jeho GPS trasy a pauz?") },
                 confirmButton = {
                     TextButton(onClick = {
-                        deletingItem?.let { db.deleteActivity(it.id) }
+                        deletingItem?.let { item ->
+                            if (active?.id == item.id) stopService(Intent(this@MainActivity, RouteTrackingService::class.java))
+                            db.deleteActivity(item.id)
+                        }
                         deletingItem = null
                         refresh()
                     }) { Text("Smazat") }
