@@ -26,7 +26,7 @@ class RouteTrackingService : Service() {
         else Notification.Builder(this).setContentTitle("Doprava").setContentText("Zaznamenávám trasu činnosti").setSmallIcon(android.R.drawable.ic_menu_mylocation).build()
         startForeground(21, notification)
         if (id > 0 && callback == null) {
-            val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 30000).setMinUpdateDistanceMeters(100f).build()
+            val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 20000).setMinUpdateDistanceMeters(40f).build()
             callback = object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
                     result.locations.forEach { location ->
@@ -40,7 +40,7 @@ class RouteTrackingService : Service() {
                             val distance = previous.distanceTo(location)
                             val elapsed = (location.time - previous.time).coerceAtLeast(1L) / 1000f
                             val speed = distance / elapsed
-                            if (distance >= 100f && speed <= 50f) {
+                            if (distance >= 40f && speed <= 50f) {
                                 Database(this@RouteTrackingService).addRoutePoint(id, location.latitude, location.longitude, location.time)
                                 lastSaved = location
                             }
