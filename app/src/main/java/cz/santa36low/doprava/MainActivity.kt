@@ -34,7 +34,8 @@ import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
@@ -168,18 +169,33 @@ class MainActivity : ComponentActivity() {
             val user = currentUser
             if (user == null) {
                 accountVehiclePlates = ""
+                accountName = ""
+                accountEmail = ""
             } else {
                 accountName = user.displayName.orEmpty()
                 accountEmail = user.email.orEmpty()
-                com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    .collection("users").document(user.uid).collection("vehicles")
-                    .get()
-                    .addOnSuccessListener { snapshot ->
-                        accountVehiclePlates = snapshot.documents
-                            .mapNotNull { it.getString("plate")?.takeIf { plate -> plate.isNotBlank() } }
-                            .distinct().sorted().joinToString(" · ")
+            }
+        }
+
+        DisposableEffect(currentUser?.uid) {
+            val userId = currentUser?.uid
+            if (userId == null) {
+                accountVehiclePlates = ""
+                onDispose { }
+            } else {
+                val registration = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    .collection("users").document(userId).collection("vehicles")
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null || snapshot == null) {
+                            accountVehiclePlates = ""
+                        } else {
+                            accountVehiclePlates = snapshot.documents
+                                .firstOrNull { it.getBoolean("selected") == true }
+                                ?.getString("plate")
+                                .orEmpty()
+                        }
                     }
-                    .addOnFailureListener { accountVehiclePlates = "" }
+                onDispose { registration.remove() }
             }
         }
 
@@ -1338,14 +1354,14 @@ class MainActivity : ComponentActivity() {
                         accountDialogVisible = true
                         drawerScope.launch { drawerState.close() }
                     }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Filled.Person, contentDescription = null, tint = Color.White)
                         Text("Účet", color = Color.White)
                     }
                     Row(Modifier.fillMaxWidth().clickable {
                         firebaseAuth.signOut()
                         drawerScope.launch { drawerState.close() }
                     }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Filled.Logout, contentDescription = null, tint = Color.White)
                         Text("Odhlásit", color = Color.White)
                     }
                 }
