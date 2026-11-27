@@ -447,7 +447,7 @@ class MainActivity : ComponentActivity() {
                                 accountBusy = false
                                 accountMessage = reauth.exception?.localizedMessage ?: "Současné heslo není správné."
                             } else {
-                                val profile = com.google.firebase.auth.userProfileChangeRequest { displayName = accountName.trim() }
+                                val profile = com.google.firebase.auth.UserProfileChangeRequest.Builder().setDisplayName(accountName.trim()).build()
                                 user.updateProfile(profile).addOnCompleteListener { nameResult ->
                                     if (!nameResult.isSuccessful) {
                                         accountBusy = false
@@ -512,7 +512,7 @@ class MainActivity : ComponentActivity() {
                                 authBusy = false
                                 authMessage = result.exception?.localizedMessage ?: "Přihlášení se nezdařilo."
                             } else if (authRegisterMode) {
-                                val profile = com.google.firebase.auth.userProfileChangeRequest { displayName = authDriverName.trim() }
+                                val profile = com.google.firebase.auth.UserProfileChangeRequest.Builder().setDisplayName(authDriverName.trim()).build()
                                 firebaseAuth.currentUser?.updateProfile(profile)?.addOnCompleteListener { profileResult ->
                                     authBusy = false
                                     if (profileResult.isSuccessful) {
