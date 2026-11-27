@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "509249834268",
+    "project_id": "doprava-37667",
+    "storage_bucket": "doprava-37667.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:509249834268:android:01fd9024e9e8a968b33ed9",
+        "android_client_info": {
+          "package_name": "cz.santa36low.doprava"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWyuxs2P_xQDCkbdC6O2hxoTr6dVdvYJo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
