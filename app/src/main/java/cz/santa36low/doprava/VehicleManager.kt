@@ -22,6 +22,7 @@ private data class DriverVehicle(
 fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
     var vehicles by remember(userId) { mutableStateOf<List<DriverVehicle>>(emptyList()) }
     var loading by remember(userId) { mutableStateOf(false) }
+    var savingVehicle by remember(userId) { mutableStateOf(false) }
     var message by remember(userId) { mutableStateOf("") }
     var dialogOpen by remember { mutableStateOf(false) }
     var editingId by remember { mutableStateOf<String?>(null) }
@@ -104,7 +105,15 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
         }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = blue)) {
             Text("Přidat vozidlo")
         }
-        if (loading) CircularProgressIndicator()
+        if (savingVehicle) {
+            Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator()
+                    Text("Ukládám vozidlo…", color = navy)
+                }
+            }
+        } else {
+        if (loading) Box(Modifier.fillMaxWidth(), contentAlignment = androidx.compose.ui.Alignment.Center) { CircularProgressIndicator() }
         if (vehicles.isEmpty() && !loading) Text("Zatím nemáš přidané žádné vozidlo.")
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 440.dp)) {
             items(vehicles, key = { it.id }) { vehicle ->
@@ -128,7 +137,7 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                         }
                         Text("Druh: ${vehicle.kind}")
                         Text("Typ: ${vehicle.type}")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             if (!vehicle.selected) {
                                 TextButton(onClick = { selectVehicle(vehicle) }) {
                                     Text("Vybrat", color = Color(0xFF16733A))
@@ -141,6 +150,7 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                                 plate = vehicle.plate
                                 dialogOpen = true
                             }) { Text("Upravit") }
+                            Spacer(Modifier.weight(1f))
                             TextButton(onClick = { deleting = vehicle }) {
                                 Text("Smazat", color = Color(0xFFB3261E))
                             }
@@ -150,6 +160,7 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
             }
         }
         if (message.isNotBlank()) Text(message, color = if (message.contains("nepodařilo")) Color(0xFFB3261E) else navy)
+        }
     }
 
     if (dialogOpen) {
@@ -175,17 +186,21 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                         "plate" to plate.trim().uppercase(),
                         "selected" to shouldSelect
                     )
+                    dialogOpen = false
+                    savingVehicle = true
                     loading = true
-                    message = "Ukládám vozidlo…"
+                    message = ""
                     ref.document(id).set(data)
                         .addOnSuccessListener {
-                            dialogOpen = false
+                            savingVehicle = false
                             message = "Vozidlo bylo uloženo."
                             loadVehicles()
                         }
                         .addOnFailureListener { error ->
+                            savingVehicle = false
                             loading = false
                             message = "Vozidlo se nepodařilo uložit: ${error.localizedMessage ?: "chyba"}. Zkontroluj také publikovaná pravidla Firestore."
+                            dialogOpen = true
                         }
                 }) { Text("Uložit") }
             },
