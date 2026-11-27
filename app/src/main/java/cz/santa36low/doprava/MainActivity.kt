@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -71,6 +72,7 @@ class MainActivity : ComponentActivity() {
         var pause by remember { mutableStateOf(db.activePause()) }
         var selectedDay by remember { mutableLongStateOf(System.currentTimeMillis()) }
         var historyMode by remember { mutableStateOf("Den") }
+        var graphMode by remember { mutableStateOf("Den") }
         var selectedType by remember { mutableStateOf("Jízda") }
         var page by remember { mutableStateOf(0) }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -499,7 +501,7 @@ class MainActivity : ComponentActivity() {
                     NavigationBarItem(
                         selected = page == 0,
                         onClick = { page = 0 },
-                        icon = { Text("⌂", style = MaterialTheme.typography.headlineSmall) },
+                        icon = { Icon(Icons.Filled.LocalShipping, contentDescription = "Činnosti", modifier = Modifier.size(30.dp)) },
                         label = { Text("Činnosti") },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = gold,
@@ -525,7 +527,7 @@ class MainActivity : ComponentActivity() {
                     NavigationBarItem(
                         selected = page == 2,
                         onClick = { page = 2; refresh() },
-                        icon = { Icon(Icons.Filled.LocalShipping, contentDescription = "Graf přehledu", modifier = Modifier.size(30.dp)) },
+                        icon = { Icon(Icons.Filled.ShowChart, contentDescription = "Graf přehledu", modifier = Modifier.size(30.dp)) },
                         label = { Text("Graf") },
                         colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
                             indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
@@ -852,45 +854,30 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     } else {
-                        val periodCalendar = Calendar.getInstance().apply {
+                        val graphCalendar = Calendar.getInstance().apply {
                             timeInMillis = selectedDay
                             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-                            when (historyMode) {
-                                "Týden" -> {
-                                    val offset = (get(Calendar.DAY_OF_WEEK) + 5) % 7
-                                    add(Calendar.DAY_OF_MONTH, -offset)
-                                }
-                                "Měsíc" -> set(Calendar.DAY_OF_MONTH, 1)
+                            if (graphMode == "Týden") {
+                                val offset = (get(Calendar.DAY_OF_WEEK) + 5) % 7
+                                add(Calendar.DAY_OF_MONTH, -offset)
                             }
                         }
-                        val periodStart = periodCalendar.timeInMillis
+                        val periodStart = graphCalendar.timeInMillis
                         val periodEnd = Calendar.getInstance().apply {
                             timeInMillis = periodStart
-                            when (historyMode) {
-                                "Den" -> add(Calendar.DAY_OF_MONTH, 1)
-                                "Týden" -> add(Calendar.DAY_OF_MONTH, 7)
-                                else -> add(Calendar.MONTH, 1)
-                            }
+                            if (graphMode == "Den") add(Calendar.DAY_OF_MONTH, 1) else add(Calendar.DAY_OF_MONTH, 7)
                         }.timeInMillis
                         val periodItems = history.filter { it.start < periodEnd && (it.end ?: tick) > periodStart }
-                        val periodLabel = when (historyMode) {
-                            "Den" -> dateOnly(periodStart)
-                            "Týden" -> dateOnly(periodStart) + " – " + dateOnly(periodEnd - 1)
-                            else -> SimpleDateFormat("LLLL yyyy", Locale.getDefault()).format(Date(periodStart))
-                        }
+                        val periodLabel = if (graphMode == "Den") dateOnly(periodStart) else dateOnly(periodStart) + " – " + dateOnly(periodEnd - 1)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            listOf("Den", "Týden", "Měsíc").forEach { mode ->
-                                FilterChip(selected = historyMode == mode, onClick = { historyMode = mode }, label = { Text(mode) })
+                            listOf("Den", "Týden").forEach { mode ->
+                                FilterChip(selected = graphMode == mode, onClick = { graphMode = mode }, label = { Text(mode) })
                             }
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("‹", modifier = Modifier.clickable {
                                 val cal = Calendar.getInstance().apply { timeInMillis = selectedDay }
-                                when (historyMode) {
-                                    "Den" -> cal.add(Calendar.DAY_OF_MONTH, -1)
-                                    "Týden" -> cal.add(Calendar.DAY_OF_MONTH, -7)
-                                    else -> cal.add(Calendar.MONTH, -1)
-                                }
+                                cal.add(Calendar.DAY_OF_MONTH, if (graphMode == "Den") -1 else -7)
                                 selectedDay = cal.timeInMillis
                             }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
                             Text(periodLabel, modifier = Modifier.clickable {
@@ -904,41 +891,94 @@ class MainActivity : ComponentActivity() {
                             }.padding(8.dp), style = MaterialTheme.typography.titleMedium, color = navy)
                             Text("›", modifier = Modifier.clickable {
                                 val cal = Calendar.getInstance().apply { timeInMillis = selectedDay }
-                                when (historyMode) {
-                                    "Den" -> cal.add(Calendar.DAY_OF_MONTH, 1)
-                                    "Týden" -> cal.add(Calendar.DAY_OF_MONTH, 7)
-                                    else -> cal.add(Calendar.MONTH, 1)
-                                }
+                                cal.add(Calendar.DAY_OF_MONTH, if (graphMode == "Den") 1 else 7)
                                 selectedDay = cal.timeInMillis
                             }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
                         }
 
-                        val chartRows = periodItems.groupBy { it.type }.map { (type, records) ->
-                            val millis = records.sumOf { item ->
-                                (minOf(item.end ?: tick, periodEnd) - maxOf(item.start, periodStart)).coerceAtLeast(0L)
-                            }
-                            type to millis
-                        }.filter { it.second > 0L }.sortedByDescending { it.second }
-                        val maxDuration = chartRows.maxOfOrNull { it.second } ?: 1L
+                        val pauseRecords = db.pausesForDay(periodStart, periodEnd)
+                        fun overlap(start: Long, end: Long?, from: Long, to: Long): Long =
+                            (minOf(end ?: tick, to) - maxOf(start, from)).coerceAtLeast(0L)
+                        val pauseMillis = pauseRecords.sumOf { overlap(it.start, it.end, periodStart, periodEnd) }
+                        val activityMillis = periodItems.filter { it.type != "Pauza" }.sumOf {
+                            overlap(it.start, it.end, periodStart, periodEnd)
+                        }
+                        val workMillis = (activityMillis - pauseMillis).coerceAtLeast(0L)
+                        val distanceKm = periodItems.filter { it.type != "Pauza" }.sumOf { db.routeDistanceKm(it.id) }
+
                         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                             Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text("Graf činností", style = MaterialTheme.typography.titleLarge, color = navy)
-                                if (chartRows.isEmpty()) {
-                                    Text("Pro vybrané období nejsou žádné činnosti.")
-                                } else {
-                                    chartRows.forEach { (type, duration) ->
-                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text(type, color = navy)
-                                                Text(formatDuration(duration), color = Color(0xFF596575))
+                                Text(if (graphMode == "Den") "Časová osa dne" else "Přehled po dnech", style = MaterialTheme.typography.titleLarge, color = navy)
+                                if (graphMode == "Den") {
+                                    val dayStart = periodStart
+                                    val dayEnd = periodEnd
+                                    Canvas(Modifier.fillMaxWidth().height(66.dp)) {
+                                        val width = size.width
+                                        for (hour in 0..24 step 2) {
+                                            val x = width * hour / 24f
+                                            drawLine(Color(0xFFDCE3EC), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), 1f)
+                                        }
+                                        periodItems.filter { it.type != "Pauza" }.forEach { item ->
+                                            val from = maxOf(item.start, dayStart)
+                                            val to = minOf(item.end ?: tick, dayEnd)
+                                            if (to > from) {
+                                                val left = width * ((from - dayStart).toFloat() / 86_400_000f)
+                                                val right = width * ((to - dayStart).toFloat() / 86_400_000f)
+                                                drawRect(blue, androidx.compose.ui.geometry.Offset(left, 5f), androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f), 22f))
                                             }
-                                            Box(Modifier.fillMaxWidth().height(13.dp).background(Color(0xFFE8EDF4), RoundedCornerShape(20.dp))) {
-                                                Box(Modifier.fillMaxWidth((duration.toFloat() / maxDuration.toFloat()).coerceIn(0f, 1f))
-                                                    .fillMaxHeight().background(blue, RoundedCornerShape(20.dp)))
+                                        }
+                                        pauseRecords.forEach { pauseItem ->
+                                            val from = maxOf(pauseItem.start, dayStart)
+                                            val to = minOf(pauseItem.end ?: tick, dayEnd)
+                                            if (to > from) {
+                                                val left = width * ((from - dayStart).toFloat() / 86_400_000f)
+                                                val right = width * ((to - dayStart).toFloat() / 86_400_000f)
+                                                drawRect(Color(0xFFFF9800), androidx.compose.ui.geometry.Offset(left, 36f), androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f), 22f))
                                             }
                                         }
                                     }
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        listOf("00:00", "06:00", "12:00", "18:00", "24:00").forEach { Text(it, style = MaterialTheme.typography.labelSmall, color = Color(0xFF596575)) }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(10.dp).background(blue, RoundedCornerShape(2.dp))); Spacer(Modifier.width(5.dp)); Text("Činnost", style = MaterialTheme.typography.labelSmall) }
+                                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(10.dp).background(Color(0xFFFF9800), RoundedCornerShape(2.dp))); Spacer(Modifier.width(5.dp)); Text("Pauza", style = MaterialTheme.typography.labelSmall) }
+                                    }
+                                } else {
+                                    val days = (0..6).map { offset ->
+                                        val startOfDay = periodStart + offset * 86_400_000L
+                                        val endOfDay = minOf(startOfDay + 86_400_000L, periodEnd)
+                                        val dayWork = periodItems.filter { it.type != "Pauza" }.sumOf { overlap(it.start, it.end, startOfDay, endOfDay) }
+                                        val dayPause = pauseRecords.sumOf { overlap(it.start, it.end, startOfDay, endOfDay) }
+                                        Triple(startOfDay, (dayWork - dayPause).coerceAtLeast(0L), dayPause)
+                                    }
+                                    val maxDay = (days.maxOfOrNull { it.second + it.third } ?: 0L).coerceAtLeast(1L)
+                                    days.forEach { (day, work, pauseTime) ->
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text(SimpleDateFormat("EEE dd.MM.", Locale.getDefault()).format(Date(day)), color = navy)
+                                                Text(formatDuration(work + pauseTime), color = Color(0xFF596575))
+                                            }
+                                            Row(Modifier.fillMaxWidth().height(13.dp).background(Color(0xFFE8EDF4), RoundedCornerShape(20.dp))) {
+                                                Box(Modifier.weight((work.toFloat() / maxDay).coerceAtLeast(0.001f)).fillMaxHeight().background(blue))
+                                                if (pauseTime > 0) Box(Modifier.weight((pauseTime.toFloat() / maxDay).coerceAtLeast(0.001f)).fillMaxHeight().background(Color(0xFFFF9800)))
+                                            }
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(10.dp).background(blue, RoundedCornerShape(2.dp))); Spacer(Modifier.width(5.dp)); Text("Odpracováno", style = MaterialTheme.typography.labelSmall) }
+                                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(10.dp).background(Color(0xFFFF9800), RoundedCornerShape(2.dp))); Spacer(Modifier.width(5.dp)); Text("Pauza", style = MaterialTheme.typography.labelSmall) }
+                                    }
                                 }
+                            }
+                        }
+
+                        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Souhrn", style = MaterialTheme.typography.titleLarge, color = navy)
+                                InfoRow("Odpracováno", formatDuration(workMillis))
+                                InfoRow("Najeto", "%.1f km".format(Locale.getDefault(), distanceKm))
+                                InfoRow("Pauza", formatDuration(pauseMillis))
                             }
                         }
 
@@ -952,7 +992,7 @@ class MainActivity : ComponentActivity() {
                                         Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
                                         item.company?.let { Text(it, color = Color(0xFF596575)) }
                                         Text(dateOnly(item.start) + " · " + timeOnly(item.start) + " – " + (item.end?.let { timeOnly(it) } ?: "probíhá"))
-                                        Text("Trvání: " + formatDuration((minOf(item.end ?: tick, periodEnd) - maxOf(item.start, periodStart)).coerceAtLeast(0L)))
+                                        Text("Trvání: " + formatDuration(overlap(item.start, item.end, periodStart, periodEnd)))
                                         OutlinedButton(onClick = { detailItem = item }, modifier = Modifier.fillMaxWidth()) {
                                             Icon(Icons.Filled.History, contentDescription = null)
                                             Spacer(Modifier.width(8.dp))
@@ -962,7 +1002,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
-                    }                }
+                    }               }
                 Spacer(Modifier.height(8.dp))
             }
         }
