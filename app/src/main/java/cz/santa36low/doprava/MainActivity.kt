@@ -188,6 +188,13 @@ class MainActivity : ComponentActivity() {
                         if (lat != null && lon != null) {
                             db.updateStartLocation(id, lat, lon)
                             db.addRoutePoint(id, lat, lon)
+                            Thread {
+                                val locationName = runCatching { PlaceLookup.reverseGeocode(lat, lon) }.getOrNull()
+                                if (!locationName.isNullOrBlank()) {
+                                    db.updateStartPlace(id, locationName)
+                                    runOnUiThread { refresh() }
+                                }
+                            }.start()
                             refresh()
                         }
                     }
@@ -207,6 +214,15 @@ class MainActivity : ComponentActivity() {
                 val save: (String?) -> Unit = { companyName ->
                     if (current.type != "Pauza" && lat != null && lon != null) db.addRoutePoint(current.id, lat, lon)
                     db.finish(current.id, lat, lon, null, companyName, endedAt)
+                    if (lat != null && lon != null) {
+                        Thread {
+                            val locationName = runCatching { PlaceLookup.reverseGeocode(lat, lon) }.getOrNull()
+                            if (!locationName.isNullOrBlank()) {
+                                db.updateEndPlace(current.id, locationName)
+                                runOnUiThread { refresh() }
+                            }
+                        }.start()
+                    }
                     stopService(Intent(this, RouteTrackingService::class.java))
                     refresh()
                 }
@@ -606,9 +622,9 @@ class MainActivity : ComponentActivity() {
                                             InfoRow("Začátek", timeOnly(item.start))
                                             InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
                                             InfoRow("GPS začátku", coordinates(item.startLat, item.startLon))
-                                            item.startPlace?.let { InfoRow("Místo začátku", it) }
+                                            InfoRow("Lokace začátku", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
                                             InfoRow("GPS konce", coordinates(item.endLat, item.endLon))
-                                            if (item.type != "Výkladka") item.endPlace?.let { InfoRow("Místo konce", it) }
+                                            InfoRow("Lokace konce", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
                                             InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
                                         }
                                         if (item.type != "Pauza") {
