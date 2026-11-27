@@ -49,6 +49,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
     private lateinit var db: Database
@@ -78,6 +79,14 @@ class MainActivity : ComponentActivity() {
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val drawerScope = rememberCoroutineScope()
         var backupMessage by remember { mutableStateOf("") }
+        val firebaseAuth = remember { FirebaseAuth.getInstance() }
+        var currentUser by remember { mutableStateOf(firebaseAuth.currentUser) }
+        var authDialogVisible by remember { mutableStateOf(false) }
+        var authRegisterMode by remember { mutableStateOf(false) }
+        var authEmail by remember { mutableStateOf("") }
+        var authPassword by remember { mutableStateOf("") }
+        var authMessage by remember { mutableStateOf("") }
+        var authBusy by remember { mutableStateOf(false) }
         var showRestoreConfirm by remember { mutableStateOf(false) }
         var pendingBackupUri by remember { mutableStateOf<Uri?>(null) }
         var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -143,6 +152,12 @@ class MainActivity : ComponentActivity() {
                     try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", running.id)) } catch (_: Exception) { }
                 }
             }
+        }
+
+        DisposableEffect(firebaseAuth) {
+            val listener = FirebaseAuth.AuthStateListener { auth -> currentUser = auth.currentUser }
+            firebaseAuth.addAuthStateListener(listener)
+            onDispose { firebaseAuth.removeAuthStateListener(listener) }
         }
 
         LaunchedEffect(Unit) {
@@ -302,6 +317,44 @@ class MainActivity : ComponentActivity() {
         val gold = Color(0xFFFFB21A)
         val pageBg = Color(0xFFF0F3F8)
         val activityIcon = Color(0xFF0B4A78)
+
+        if (authDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { if (!authBusy) authDialogVisible = false },
+                title = { Text(if (authRegisterMode) "Registrace řidiče" else "Přihlášení") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(value = authEmail, onValueChange = { authEmail = it }, label = { Text("E-mail") }, singleLine = true, enabled = !authBusy)
+                        OutlinedTextField(
+                            value = authPassword, onValueChange = { authPassword = it },
+                            label = { Text("Heslo (min. 6 znaků)") }, singleLine = true, enabled = !authBusy,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+                        if (authMessage.isNotBlank()) Text(authMessage, color = Color(0xFFB3261E))
+                        TextButton(onClick = { authRegisterMode = !authRegisterMode; authMessage = "" }, enabled = !authBusy) {
+                            Text(if (authRegisterMode) "Už mám účet – přihlásit" else "Nemám účet – registrovat")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(enabled = !authBusy && authEmail.isNotBlank() && authPassword.length >= 6, onClick = {
+                        authBusy = true
+                        authMessage = ""
+                        val task = if (authRegisterMode) firebaseAuth.createUserWithEmailAndPassword(authEmail.trim(), authPassword)
+                            else firebaseAuth.signInWithEmailAndPassword(authEmail.trim(), authPassword)
+                        task.addOnCompleteListener { result ->
+                            authBusy = false
+                            if (result.isSuccessful) {
+                                authDialogVisible = false
+                                authPassword = ""
+                                authMessage = ""
+                            } else authMessage = result.exception?.localizedMessage ?: "Přihlášení se nezdařilo."
+                        }
+                    }) { Text(if (authBusy) "Čekej…" else if (authRegisterMode) "Vytvořit účet" else "Přihlásit") }
+                },
+                dismissButton = { TextButton(onClick = { authDialogVisible = false }, enabled = !authBusy) { Text("Zavřít") } }
+            )
+        }
 
         if (showRestoreConfirm) {
             AlertDialog(
@@ -1056,21 +1109,36 @@ class MainActivity : ComponentActivity() {
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White.copy(alpha = 0.38f))
-                    Text("Přihlásit", color = Color.White.copy(alpha = 0.38f))
+                if (currentUser == null) {
+                    Row(Modifier.fillMaxWidth().clickable {
+                        authRegisterMode = false; authMessage = ""; authDialogVisible = true
+                        drawerScope.launch { drawerState.close() }
+                    }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                        Text("Přihlásit", color = Color.White)
+                    }
+                    Row(Modifier.fillMaxWidth().clickable {
+                        authRegisterMode = true; authMessage = ""; authDialogVisible = true
+                        drawerScope.launch { drawerState.close() }
+                    }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                        Text("Registrace", color = Color.White)
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth().clickable {
+                        firebaseAuth.signOut()
+                        drawerScope.launch { drawerState.close() }
+                    }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                        Text("Odhlásit", color = Color.White)
+                    }
+                    Text(currentUser?.email ?: "", color = Color(0xFFB9C9DA), style = MaterialTheme.typography.labelSmall)
                 }
                 Row(
-                    Modifier.fillMaxWidth()
-                        .clickable {
-                            page = 3
-                            drawerScope.launch { drawerState.close() }
-                        }
-                        .padding(vertical = 10.dp),
+                    Modifier.fillMaxWidth().clickable {
+                        page = 3
+                        drawerScope.launch { drawerState.close() }
+                    }.padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
