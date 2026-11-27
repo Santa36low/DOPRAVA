@@ -1004,6 +1004,7 @@ class MainActivity : ComponentActivity() {
                                 Text("Souhrn", style = MaterialTheme.typography.titleLarge, color = navy)
                                 InfoRow("Odpracováno", formatDuration(workMillis))
                                 InfoRow("Najeto", "%.1f km".format(Locale.getDefault(), distanceKm))
+                                InfoRow("Natankováno", "%.1f l".format(Locale.getDefault(), db.fuelLitersBetween(periodStart, periodEnd)))
                                 InfoRow("Pauza", formatDuration(pauseMillis))
                             }
                         }
