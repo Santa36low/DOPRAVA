@@ -760,7 +760,15 @@ class MainActivity : ComponentActivity() {
                                             GpsInfoRow("GPS konce", item.endLat, item.endLon) { lat, lon -> openGpsOnMap(lat, lon) }
                                             InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
                                             if (item.type != "Pauza") {
-                                                InfoRow("Ujeto", "%.1f km".format(Locale.getDefault(), db.routeDistanceKm(item.id)))
+                                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text("Ujeto: %.1f km".format(Locale.getDefault(), db.routeDistanceKm(item.id)), modifier = Modifier.weight(1f), color = Color(0xFF596575))
+                                                    IconButton(onClick = {
+                                                        startActivity(Intent(this@MainActivity, TrackMapActivity::class.java)
+                                                            .putExtra("activity_id", item.id))
+                                                    }) {
+                                                        Icon(Icons.Filled.Map, contentDescription = "Zobrazit projetou trasu na mapě", tint = blue, modifier = Modifier.size(30.dp))
+                                                    }
+                                                }
                                             }
                                         }
                                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
