@@ -887,25 +887,17 @@ class MainActivity : ComponentActivity() {
                     .background(Color.Black.copy(alpha = 0.28f))
                     .clickable { drawerScope.launch { drawerState.close() } }
             )
+            val menuShape = RoundedCornerShape(14.dp)
             Column(
                 Modifier.align(Alignment.TopEnd)
                     .padding(top = 104.dp)
-                    .fillMaxHeight()
                     .width(IntrinsicSize.Max)
                     .widthIn(min = 168.dp, max = 240.dp)
-                    .border(2.dp, Color(0xFF2684D8), RoundedCornerShape(bottomStart = 14.dp))
-                    .background(Color(0xFF102B46))
-                    .padding(horizontal = 12.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .border(2.dp, Color(0xFF2684D8), menuShape)
+                    .background(Color(0xFF102B46), menuShape)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(Icons.Filled.Settings, contentDescription = null, tint = Color(0xFFB9C9DA))
-                    Text("Nastavení", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                }
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
