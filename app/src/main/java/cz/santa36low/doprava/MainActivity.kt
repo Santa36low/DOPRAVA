@@ -1325,9 +1325,9 @@ class MainActivity : ComponentActivity() {
                         Text("Registrace", color = Color.White)
                     }
                 } else {
-                    Text(currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Řidič", color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 6.dp))
+                    Text(currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Řidič", color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     if (accountVehiclePlates.isNotBlank()) {
-                        Text(accountVehiclePlates, color = Color(0xFFFFD166), style = MaterialTheme.typography.labelMedium)
+                        Text(accountVehiclePlates, color = Color(0xFFFFD166), style = MaterialTheme.typography.labelMedium, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
                     Row(Modifier.fillMaxWidth().clickable {
                         accountName = currentUser?.displayName.orEmpty()
