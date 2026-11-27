@@ -328,7 +328,7 @@ class MainActivity : ComponentActivity() {
             backupMessage = "Připravuji databázi a odesílám ji do Firebase…"
             Thread {
                 var closed = false
-                var message: String
+                var message = ""
                 try {
                     db.checkpointForBackup()
                     db.close()
@@ -368,7 +368,7 @@ class MainActivity : ComponentActivity() {
             backupMessage = "Stahuji zálohu z Firebase a ověřuji databázi…"
             Thread {
                 var closed = false
-                var message: String
+                var message = ""
                 try {
                     val temp = File(cacheDir, "doprava-cloud-restore.db")
                     CloudDatabaseBackup.downloadToFile(temp, userId)
