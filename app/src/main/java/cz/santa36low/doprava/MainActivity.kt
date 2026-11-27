@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
-import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -601,7 +600,7 @@ class MainActivity : ComponentActivity() {
                         Text("Pozor: obnovení nahradí současnou historii obsahem záložního souboru. Před obnovou si případně nejprve ulož aktuální zálohu.", color = Color(0xFF9A5B00))
                         if (backupMessage.isNotBlank()) Text(backupMessage, color = navy)
                     } else if (page == 0) {
-                        (activities + listOf("Pauza" to Icons.Filled.PauseCircle)).chunked(2).forEach { pair ->
+                        (activities + listOf("Pauza" to Icons.Filled.Coffee)).chunked(2).forEach { pair ->
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -685,7 +684,7 @@ class MainActivity : ComponentActivity() {
                                             style = MaterialTheme.typography.titleLarge)
                                     }
                                     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                                        Icon(activities.firstOrNull { it.first == current.type }?.second ?: Icons.Filled.LocalShipping,
+                                        Icon(if (current.type == "Pauza") Icons.Filled.Coffee else activities.firstOrNull { it.first == current.type }?.second ?: Icons.Filled.LocalShipping,
                                             contentDescription = current.type, tint = blue, modifier = Modifier.size(48.dp))
                                         Text(current.type, style = MaterialTheme.typography.headlineSmall, color = navy)
                                         Text("TRVÁNÍ", color = blue, style = MaterialTheme.typography.labelLarge)
@@ -813,7 +812,7 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             filteredHistory.forEach { item ->
-                                val itemIcon = if (item.type == "Pauza") Icons.Filled.PauseCircle
+                                val itemIcon = if (item.type == "Pauza") Icons.Filled.Coffee
                                     else activities.firstOrNull { it.first == item.type }?.second ?: Icons.Filled.LocalShipping
                                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -1016,7 +1015,12 @@ class MainActivity : ComponentActivity() {
                             periodItems.sortedByDescending { it.start }.forEach { item ->
                                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                        Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            val itemIcon = if (item.type == "Pauza") Icons.Filled.Coffee
+                                                else activities.firstOrNull { it.first == item.type }?.second ?: Icons.Filled.LocalShipping
+                                            Icon(itemIcon, contentDescription = item.type, tint = blue, modifier = Modifier.size(28.dp))
+                                            Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
+                                        }
                                         item.company?.let { Text(it, color = Color(0xFF596575)) }
                                         Text(dateOnly(item.start) + " · " + timeOnly(item.start) + " – " + (item.end?.let { timeOnly(it) } ?: "probíhá"))
                                         Text("Trvání: " + formatDuration(overlap(item.start, item.end, periodStart, periodEnd)))
