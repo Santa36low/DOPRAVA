@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Coffee
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.History
@@ -73,6 +75,15 @@ class MainActivity : ComponentActivity() {
         var pendingPlaceAction by remember { mutableStateOf<((String?) -> Unit)?>(null) }
         var pendingLatitude by remember { mutableDoubleStateOf(0.0) }
         var pendingLongitude by remember { mutableDoubleStateOf(0.0) }
+        var editingItem by remember { mutableStateOf<ActivityRecord?>(null) }
+        var deletingItem by remember { mutableStateOf<ActivityRecord?>(null) }
+        var editType by remember { mutableStateOf("") }
+        var editStart by remember { mutableStateOf("") }
+        var editEnd by remember { mutableStateOf("") }
+        var editStartPlace by remember { mutableStateOf("") }
+        var editEndPlace by remember { mutableStateOf("") }
+        var editCompany by remember { mutableStateOf("") }
+        var editNote by remember { mutableStateOf("") }
 
         val permissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
@@ -135,32 +146,26 @@ class MainActivity : ComponentActivity() {
         fun startSelected() {
             if (active != null) return
             withLocation { lat, lon ->
-                askForPlace(lat, lon) { placeName ->
-                    val id = db.start(selectedType, lat, lon, placeName)
-                    if (selectedType == "Jízda" && lat != null && lon != null) db.addRoutePoint(id, lat, lon)
-                    if (selectedType == "Jízda" && hasLocation()) {
-                        try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
-                    } else stopService(Intent(this, RouteTrackingService::class.java))
-                    refresh()
-                }
+                val id = db.start(selectedType, lat, lon, null)
+                if (selectedType != "Pauza" && lat != null && lon != null) db.addRoutePoint(id, lat, lon)
+                if (selectedType != "Pauza" && hasLocation()) {
+                    try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
+                } else stopService(Intent(this, RouteTrackingService::class.java))
+                refresh()
             }
         }
 
         fun finishActive() {
             val current = active ?: return
-            if (pause != null) {
-                db.finish(current.id, null, null, null)
-                stopService(Intent(this, RouteTrackingService::class.java))
-                refresh()
-                return
-            }
+            if (pause != null) return
             withLocation { lat, lon ->
-                askForPlace(lat, lon) { placeName ->
-                    if (current.type == "Jízda" && lat != null && lon != null) db.addRoutePoint(current.id, lat, lon)
-                    db.finish(current.id, lat, lon, placeName)
+                val save: (String?) -> Unit = { companyName ->
+                    if (current.type != "Pauza" && lat != null && lon != null) db.addRoutePoint(current.id, lat, lon)
+                    db.finish(current.id, lat, lon, companyName, if (current.type == "Výkladka") companyName else null)
                     stopService(Intent(this, RouteTrackingService::class.java))
                     refresh()
                 }
+                if (current.type == "Výkladka") askForPlace(lat, lon, save) else save(null)
             }
         }
 
@@ -173,10 +178,10 @@ class MainActivity : ComponentActivity() {
         if (placeDialogVisible) {
             AlertDialog(
                 onDismissRequest = { completePlace(null) },
-                title = { Text("Firma nebo místo") },
+                title = { Text("Firma při výkladce") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if (placeLoading) "Hledám provozovny v okolí GPS…" else if (placeResults.isEmpty()) "V okolí nebyla nalezena pojmenovaná firma. Můžeš ji vyhledat nebo zadat ručně." else "Vyber nalezenou firmu:")
+                        Text(if (placeLoading) "Hledám firmy v okolí konečné GPS…" else if (placeResults.isEmpty()) "V okolí nebyla nalezena firma. Můžeš ji dopsat ručně." else "Vyber správnou firmu:")
                         placeResults.forEach { place ->
                             TextButton(onClick = { completePlace(if (place.address.isBlank()) place.name else place.name + ", " + place.address) }) {
                                 Text(if (place.address.isBlank()) place.name else place.name + " · " + place.address)
@@ -199,6 +204,54 @@ class MainActivity : ComponentActivity() {
                 dismissButton = { TextButton(onClick = { completePlace(null) }) { Text("Pokračovat bez názvu") } }
             )
         }
+
+        if (editingItem != null) {
+            AlertDialog(
+                onDismissRequest = { editingItem = null },
+                title = { Text("Upravit záznam") },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(editType, { editType = it }, label = { Text("Činnost") }, singleLine = true)
+                        OutlinedTextField(editStart, { editStart = it }, label = { Text("Začátek (dd.MM.rrrr HH:mm:ss)") }, singleLine = true)
+                        OutlinedTextField(editEnd, { editEnd = it }, label = { Text("Konec (prázdné = probíhá)") }, singleLine = true)
+                        OutlinedTextField(editStartPlace, { editStartPlace = it }, label = { Text("Místo začátku") })
+                        OutlinedTextField(editEndPlace, { editEndPlace = it }, label = { Text("Místo konce") })
+                        OutlinedTextField(editCompany, { editCompany = it }, label = { Text("Firma") })
+                        OutlinedTextField(editNote, { editNote = it }, label = { Text("Poznámka") })
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val parser = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
+                        val startMs = runCatching { parser.parse(editStart)?.time }.getOrNull()
+                        val endMs = if (editEnd.isBlank()) null else runCatching { parser.parse(editEnd)?.time }.getOrNull()
+                        val item = editingItem
+                        if (item != null && startMs != null && (editEnd.isBlank() || endMs != null)) {
+                            db.updateActivity(item.id, editType.trim().ifBlank { item.type }, startMs, endMs, editStartPlace, editEndPlace, editCompany, editNote)
+                            editingItem = null
+                            refresh()
+                        }
+                    }) { Text("Uložit") }
+                },
+                dismissButton = { TextButton(onClick = { editingItem = null }) { Text("Zrušit") } }
+            )
+        }
+        if (deletingItem != null) {
+            AlertDialog(
+                onDismissRequest = { deletingItem = null },
+                title = { Text("Smazat záznam?") },
+                text = { Text("Opravdu chceš smazat celý záznam včetně jeho GPS trasy a pauz?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deletingItem?.let { db.deleteActivity(it.id) }
+                        deletingItem = null
+                        refresh()
+                    }) { Text("Smazat") }
+                },
+                dismissButton = { TextButton(onClick = { deletingItem = null }) { Text("Zrušit") } }
+            )
+        }
+
         Scaffold(
             containerColor = pageBg,
             bottomBar = {
@@ -296,10 +349,10 @@ class MainActivity : ComponentActivity() {
                                             if (name == "Pauza" && active != null) {
                                                 if (pause == null) {
                                                     db.startPause(active!!.id)
-                                                    if (active!!.type == "Jízda") stopService(Intent(this@MainActivity, RouteTrackingService::class.java))
+                                                    if (active!!.type != "Pauza") stopService(Intent(this@MainActivity, RouteTrackingService::class.java))
                                                 } else {
                                                     db.finishPause()
-                                                    if (active!!.type == "Jízda" && hasLocation()) ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, RouteTrackingService::class.java).putExtra("activity_id", active!!.id))
+                                                    if (active!!.type != "Pauza" && hasLocation()) ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, RouteTrackingService::class.java).putExtra("activity_id", active!!.id))
                                                 }
                                                 refresh()
                                             } else if (active == null) selectedType = name
@@ -445,9 +498,10 @@ class MainActivity : ComponentActivity() {
                                             item.startPlace?.let { InfoRow("Místo začátku", it) }
                                             InfoRow("GPS konce", coordinates(item.endLat, item.endLon))
                                             item.endPlace?.let { InfoRow("Místo konce", it) }
+                                            item.company?.let { InfoRow("Firma", it) }
                                             InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
                                         }
-                                        if (item.type == "Jízda") {
+                                        if (item.type != "Pauza") {
                                             val kilometers = db.routeDistanceKm(item.id)
                                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.SpaceBetween) {
@@ -457,9 +511,23 @@ class MainActivity : ComponentActivity() {
                                                     startActivity(Intent(this@MainActivity, TrackMapActivity::class.java)
                                                         .putExtra("activity_id", item.id))
                                                 }) {
-                                                    Icon(Icons.Filled.Map, contentDescription = "Zobrazit trasu na mapě",
-                                                        tint = blue, modifier = Modifier.size(30.dp))
+                                                    Icon(Icons.Filled.Map, contentDescription = "Zobrazit trasu na mapě", tint = blue, modifier = Modifier.size(30.dp))
                                                 }
+                                            }
+                                        }
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                            IconButton(onClick = {
+                                                editingItem = item
+                                                editType = item.type
+                                                editStart = date(item.start)
+                                                editEnd = item.end?.let { date(it) } ?: ""
+                                                editStartPlace = item.startPlace ?: ""
+                                                editEndPlace = item.endPlace ?: ""
+                                                editCompany = item.company ?: ""
+                                                editNote = item.note
+                                            }) { Icon(Icons.Filled.Edit, contentDescription = "Upravit záznam", tint = blue) }
+                                            IconButton(onClick = { deletingItem = item }) {
+                                                Icon(Icons.Filled.Delete, contentDescription = "Smazat záznam", tint = Color(0xFFC92D35))
                                             }
                                         }
                                     }
