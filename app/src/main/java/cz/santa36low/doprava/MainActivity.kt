@@ -46,6 +46,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var db: Database
@@ -71,6 +72,8 @@ class MainActivity : ComponentActivity() {
         var historyMode by remember { mutableStateOf("Den") }
         var selectedType by remember { mutableStateOf("Jízda") }
         var page by remember { mutableStateOf(0) }
+        val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+        val drawerScope = rememberCoroutineScope()
         var backupMessage by remember { mutableStateOf("") }
         var showRestoreConfirm by remember { mutableStateOf(false) }
         var pendingBackupUri by remember { mutableStateOf<Uri?>(null) }
@@ -423,6 +426,23 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet {
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                        label = { Text("Nastavení") },
+                        selected = page == 3,
+                        onClick = {
+                            page = 3
+                            drawerScope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                }
+            }
+        ) {
         Scaffold(
             containerColor = pageBg,
             bottomBar = {
@@ -464,14 +484,6 @@ class MainActivity : ComponentActivity() {
                         colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
                             indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
                     )
-                    NavigationBarItem(
-                        selected = page == 3,
-                        onClick = { page = 3 },
-                        icon = { Icon(Icons.Filled.Settings, contentDescription = "Záloha", modifier = Modifier.size(26.dp)) },
-                        label = { Text("Záloha") },
-                        colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
-                            indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
-                    )
                 }
             }
         ) { padding ->
@@ -506,8 +518,10 @@ class MainActivity : ComponentActivity() {
                             Box(Modifier.padding(top = 5.dp).width(104.dp).height(3.dp)
                                 .background(gold, RoundedCornerShape(50)))
                         }
-                        Icon(Icons.Filled.Settings, contentDescription = "Nastavení",
-                            tint = Color(0xFFB9C9DA), modifier = Modifier.size(27.dp))
+                        IconButton(onClick = { drawerScope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Otevřít nabídku",
+                                tint = Color(0xFFB9C9DA), modifier = Modifier.size(27.dp))
+                        }
                     }
                 }
 
@@ -851,6 +865,7 @@ class MainActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.height(8.dp))
             }
+        }
         }
     }
 
