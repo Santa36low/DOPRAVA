@@ -60,19 +60,20 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
 
     fun selectVehicle(vehicle: DriverVehicle) {
         val ref = collection ?: return
-        loading = true
+        val previousVehicles = vehicles
+        // Výběr se projeví hned; potvrzení serveru běží na pozadí.
+        vehicles = vehicles.map { it.copy(selected = it.id == vehicle.id) }
+        message = "Ukládám výběr vozidla…"
         val batch = FirebaseFirestore.getInstance().batch()
-        vehicles.filter { it.selected || it.id == vehicle.id }.forEach { item ->
+        vehicles.filter { it.selected || previousVehicles.any { old -> old.id == it.id && old.selected } }.forEach { item ->
             batch.update(ref.document(item.id), "selected", item.id == vehicle.id)
         }
         batch.commit()
             .addOnSuccessListener {
-                vehicles = vehicles.map { it.copy(selected = it.id == vehicle.id) }
-                loading = false
                 message = "Vybrané vozidlo: ${vehicle.plate}"
             }
             .addOnFailureListener { error ->
-                loading = false
+                vehicles = previousVehicles
                 message = "Výběr vozidla se nepodařil: ${error.localizedMessage ?: "chyba"}"
             }
     }
