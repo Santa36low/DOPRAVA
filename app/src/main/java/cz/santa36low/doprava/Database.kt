@@ -58,9 +58,9 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         "SELECT id,type,start_time,end_time,note,start_lat,start_lon,end_lat,end_lon,start_place,end_place,company FROM activities WHERE end_time IS NULL ORDER BY id DESC LIMIT 1", null
     ).use { if (!it.moveToFirst()) null else readActivity(it) }
 
-    fun start(type: String, lat: Double?, lon: Double?, place: String? = null, company: String? = null): Long {
+    fun start(type: String, lat: Double?, lon: Double?, place: String? = null, company: String? = null, startTime: Long = System.currentTimeMillis()): Long {
         val v = ContentValues().apply {
-            put("type", type); put("start_time", System.currentTimeMillis())
+            put("type", type); put("start_time", startTime)
             if (lat != null) put("start_lat", lat)
             if (lon != null) put("start_lon", lon)
             if (!place.isNullOrBlank()) put("start_place", place)
@@ -69,9 +69,9 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         return writableDatabase.insert("activities", null, v)
     }
 
-    fun finish(id: Long, lat: Double?, lon: Double?, place: String? = null, company: String? = null) {
+    fun finish(id: Long, lat: Double?, lon: Double?, place: String? = null, company: String? = null, endTime: Long = System.currentTimeMillis()) {
         val v = ContentValues().apply {
-            put("end_time", System.currentTimeMillis())
+            put("end_time", endTime)
             if (lat != null) put("end_lat", lat)
             if (lon != null) put("end_lon", lon)
             if (!place.isNullOrBlank()) put("end_place", place)
