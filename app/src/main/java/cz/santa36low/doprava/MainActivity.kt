@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
@@ -1330,14 +1332,14 @@ class MainActivity : ComponentActivity() {
                         authRegisterMode = false; authMessage = ""; authDialogVisible = true
                         drawerScope.launch { drawerState.close() }
                     }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Filled.Login, contentDescription = null, tint = Color.White)
                         Text("Přihlásit", color = Color.White)
                     }
                     Row(Modifier.fillMaxWidth().clickable {
                         authRegisterMode = true; authMessage = ""; authDialogVisible = true
                         drawerScope.launch { drawerState.close() }
                     }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = Color.White)
                         Text("Registrace", color = Color.White)
                     }
                 } else {
