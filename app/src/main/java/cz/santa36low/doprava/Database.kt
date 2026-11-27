@@ -36,6 +36,7 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
             db.execSQL("ALTER TABLE activities ADD COLUMN start_place TEXT")
             db.execSQL("ALTER TABLE activities ADD COLUMN end_place TEXT")
         }
+        if (oldVersion < 5) db.execSQL("ALTER TABLE activities ADD COLUMN company TEXT")
     }
 
     private fun readActivity(c: android.database.Cursor) = ActivityRecord(
@@ -49,7 +50,8 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
         endLat = if (c.isNull(7)) null else c.getDouble(7),
         endLon = if (c.isNull(8)) null else c.getDouble(8),
         startPlace = if (c.isNull(9)) null else c.getString(9),
-        endPlace = if (c.isNull(10)) null else c.getString(10)
+        endPlace = if (c.isNull(10)) null else c.getString(10),
+        company = if (c.isNull(11)) null else c.getString(11)
     )
 
     fun active(): ActivityRecord? = readableDatabase.rawQuery(
@@ -72,6 +74,7 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
             if (lat != null) put("end_lat", lat)
             if (lon != null) put("end_lon", lon)
             if (!place.isNullOrBlank()) put("end_place", place)
+            if (!company.isNullOrBlank()) put("company", company)
         }
         writableDatabase.update("activities", v, "id=?", arrayOf(id.toString()))
     }
