@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -74,6 +76,7 @@ class MainActivity : ComponentActivity() {
         var placeLoading by remember { mutableStateOf(false) }
         var manualPlace by remember { mutableStateOf("") }
         var pendingPlaceAction by remember { mutableStateOf<((String?) -> Unit)?>(null) }
+        var placeDialogTitle by remember { mutableStateOf("Potvrzení firmy") }
         var pendingLatitude by remember { mutableDoubleStateOf(0.0) }
         var pendingLongitude by remember { mutableDoubleStateOf(0.0) }
         var editingItem by remember { mutableStateOf<ActivityRecord?>(null) }
@@ -104,13 +107,26 @@ class MainActivity : ComponentActivity() {
         fun withLocation(done: (Double?, Double?) -> Unit) {
             if (!hasLocation()) {
                 permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-                done(null, null)
                 return
             }
             try {
-                LocationServices.getFusedLocationProviderClient(this).lastLocation
-                    .addOnSuccessListener { done(it?.latitude, it?.longitude) }
-                    .addOnFailureListener { done(null, null) }
+                val client = LocationServices.getFusedLocationProviderClient(this)
+                val token = CancellationTokenSource()
+                client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token.token)
+                    .addOnSuccessListener { location ->
+                        if (location != null) {
+                            done(location.latitude, location.longitude)
+                        } else {
+                            client.lastLocation
+                                .addOnSuccessListener { last -> done(last?.latitude, last?.longitude) }
+                                .addOnFailureListener { done(null, null) }
+                        }
+                    }
+                    .addOnFailureListener {
+                        client.lastLocation
+                            .addOnSuccessListener { last -> done(last?.latitude, last?.longitude) }
+                            .addOnFailureListener { done(null, null) }
+                    }
             } catch (_: SecurityException) {
                 done(null, null)
             }
@@ -129,7 +145,8 @@ class MainActivity : ComponentActivity() {
             action?.invoke(name)
         }
 
-        fun askForPlace(lat: Double?, lon: Double?, done: (String?) -> Unit) {
+        fun askForPlace(lat: Double?, lon: Double?, title: String, done: (String?) -> Unit) {
+            placeDialogTitle = title
             pendingPlaceAction = done
             pendingLatitude = lat ?: 0.0
             pendingLongitude = lon ?: 0.0
@@ -147,12 +164,16 @@ class MainActivity : ComponentActivity() {
         fun startSelected() {
             if (active != null) return
             withLocation { lat, lon ->
-                val id = db.start(selectedType, lat, lon, null)
-                if (selectedType != "Pauza" && lat != null && lon != null) db.addRoutePoint(id, lat, lon)
-                if (selectedType != "Pauza" && hasLocation()) {
-                    try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
-                } else stopService(Intent(this, RouteTrackingService::class.java))
-                refresh()
+                val begin: (String?) -> Unit = { companyName ->
+                    val id = db.start(selectedType, lat, lon, null, companyName)
+                    if (selectedType != "Pauza" && lat != null && lon != null) db.addRoutePoint(id, lat, lon)
+                    if (selectedType != "Pauza" && hasLocation()) {
+                        try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
+                    } else stopService(Intent(this, RouteTrackingService::class.java))
+                    refresh()
+                }
+                if (selectedType == "Nákladka") askForPlace(lat, lon, "Potvrzení firmy při nákladce", begin)
+                else begin(null)
             }
         }
 
@@ -166,7 +187,7 @@ class MainActivity : ComponentActivity() {
                     stopService(Intent(this, RouteTrackingService::class.java))
                     refresh()
                 }
-                if (current.type == "Výkladka") askForPlace(lat, lon, save) else save(null)
+                if (current.type == "Výkladka") askForPlace(lat, lon, "Potvrzení firmy při výkladce", save) else save(null)
             }
         }
 
@@ -179,12 +200,12 @@ class MainActivity : ComponentActivity() {
         if (placeDialogVisible) {
             AlertDialog(
                 onDismissRequest = { completePlace(null) },
-                title = { Text("Firma při výkladce") },
+                title = { Text(placeDialogTitle) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(if (placeLoading) "Hledám firmy v okolí konečné GPS…" else if (placeResults.isEmpty()) "V okolí nebyla nalezena firma. Můžeš ji dopsat ručně." else "Vyber správnou firmu. Pokud je špatně, zvol jinou nebo ji napiš ručně:")
                         placeResults.forEach { place ->
-                            TextButton(onClick = { completePlace(if (place.address.isBlank()) place.name else place.name + ", " + place.address) }) {
+                            TextButton(onClick = { manualPlace = if (place.address.isBlank()) place.name else place.name + ", " + place.address }) {
                                 Text(if (place.address.isBlank()) place.name else place.name + " · " + place.address)
                             }
                         }
@@ -192,7 +213,7 @@ class MainActivity : ComponentActivity() {
                         Text("Data firem: © OpenStreetMap contributors", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                     }
                 },
-                confirmButton = { TextButton(onClick = { completePlace(manualPlace.trim().ifBlank { null }) }, enabled = manualPlace.isNotBlank()) { Text("Použít ruční zadání") } },
+                confirmButton = { TextButton(onClick = { completePlace(manualPlace.trim().ifBlank { null }) }, enabled = manualPlace.isNotBlank()) { Text("Potvrdit firmu") } },
                 dismissButton = { TextButton(onClick = { completePlace(null) }) { Text("Bez firmy") } }
             )
         }
@@ -554,6 +575,7 @@ class MainActivity : ComponentActivity() {
                                             Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
                                         }
                                         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            item.company?.let { InfoRow("Firma", it) }
                                             InfoRow("Datum", dateOnly(item.start))
                                             InfoRow("Začátek", timeOnly(item.start))
                                             InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
@@ -561,7 +583,6 @@ class MainActivity : ComponentActivity() {
                                             item.startPlace?.let { InfoRow("Místo začátku", it) }
                                             InfoRow("GPS konce", coordinates(item.endLat, item.endLon))
                                             if (item.type != "Výkladka") item.endPlace?.let { InfoRow("Místo konce", it) }
-                                            item.company?.let { InfoRow("Firma", it) }
                                             InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
                                         }
                                         if (item.type != "Pauza") {
