@@ -86,8 +86,16 @@ class MainActivity : ComponentActivity() {
         var authRegisterMode by remember { mutableStateOf(false) }
         var authEmail by remember { mutableStateOf("") }
         var authPassword by remember { mutableStateOf("") }
+        var authDriverName by remember { mutableStateOf("") }
         var authMessage by remember { mutableStateOf("") }
         var authBusy by remember { mutableStateOf(false) }
+        var accountDialogVisible by remember { mutableStateOf(false) }
+        var accountName by remember { mutableStateOf("") }
+        var accountEmail by remember { mutableStateOf("") }
+        var accountCurrentPassword by remember { mutableStateOf("") }
+        var accountNewPassword by remember { mutableStateOf("") }
+        var accountMessage by remember { mutableStateOf("") }
+        var accountBusy by remember { mutableStateOf(false) }
         var showRestoreConfirm by remember { mutableStateOf(false) }
         var pendingBackupUri by remember { mutableStateOf<Uri?>(null) }
         var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -152,6 +160,13 @@ class MainActivity : ComponentActivity() {
                 if (running != null && running.type != "Pauza") {
                     try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", running.id)) } catch (_: Exception) { }
                 }
+            }
+        }
+
+        LaunchedEffect(currentUser?.uid) {
+            currentUser?.let { user ->
+                accountName = user.displayName.orEmpty()
+                accountEmail = user.email.orEmpty()
             }
         }
 
@@ -406,12 +421,74 @@ class MainActivity : ComponentActivity() {
         val pageBg = Color(0xFFF0F3F8)
         val activityIcon = Color(0xFF0B4A78)
 
+        if (accountDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { if (!accountBusy) accountDialogVisible = false },
+                title = { Text("Účet řidiče") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(value = accountName, onValueChange = { accountName = it }, label = { Text("Jméno řidiče") }, singleLine = true, enabled = !accountBusy)
+                        OutlinedTextField(value = accountEmail, onValueChange = { accountEmail = it }, label = { Text("E-mail") }, singleLine = true, enabled = !accountBusy)
+                        OutlinedTextField(value = accountCurrentPassword, onValueChange = { accountCurrentPassword = it }, label = { Text("Současné heslo – ověření změn") }, singleLine = true, enabled = !accountBusy, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                        OutlinedTextField(value = accountNewPassword, onValueChange = { accountNewPassword = it }, label = { Text("Nové heslo (volitelné, min. 6 znaků)") }, singleLine = true, enabled = !accountBusy, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+                        if (accountMessage.isNotBlank()) Text(accountMessage, color = Color(0xFFB3261E))
+                    }
+                },
+                confirmButton = {
+                    TextButton(enabled = !accountBusy && accountName.isNotBlank() && accountEmail.isNotBlank() && accountCurrentPassword.isNotBlank() && (accountNewPassword.isBlank() || accountNewPassword.length >= 6), onClick = {
+                        val user = firebaseAuth.currentUser
+                        val oldEmail = user?.email
+                        if (user == null || oldEmail.isNullOrBlank()) { accountMessage = "Účet není přihlášen."; return@TextButton }
+                        accountBusy = true
+                        accountMessage = ""
+                        val credential = com.google.firebase.auth.EmailAuthProvider.getCredential(oldEmail, accountCurrentPassword)
+                        user.reauthenticate(credential).addOnCompleteListener { reauth ->
+                            if (!reauth.isSuccessful) {
+                                accountBusy = false
+                                accountMessage = reauth.exception?.localizedMessage ?: "Současné heslo není správné."
+                            } else {
+                                val profile = com.google.firebase.auth.userProfileChangeRequest { displayName = accountName.trim() }
+                                user.updateProfile(profile).addOnCompleteListener { nameResult ->
+                                    if (!nameResult.isSuccessful) {
+                                        accountBusy = false
+                                        accountMessage = nameResult.exception?.localizedMessage ?: "Jméno se nepodařilo změnit."
+                                    } else {
+                                        val emailTask = if (accountEmail.trim() != oldEmail) user.updateEmail(accountEmail.trim()) else com.google.android.gms.tasks.Tasks.forResult<Void>(null)
+                                        emailTask.addOnCompleteListener { emailResult ->
+                                            if (!emailResult.isSuccessful) {
+                                                accountBusy = false
+                                                accountMessage = emailResult.exception?.localizedMessage ?: "E-mail se nepodařilo změnit."
+                                            } else {
+                                                val passwordTask = if (accountNewPassword.isNotBlank()) user.updatePassword(accountNewPassword) else com.google.android.gms.tasks.Tasks.forResult<Void>(null)
+                                                passwordTask.addOnCompleteListener { passwordResult ->
+                                                    accountBusy = false
+                                                    if (passwordResult.isSuccessful) {
+                                                        currentUser = firebaseAuth.currentUser
+                                                        accountCurrentPassword = ""
+                                                        accountNewPassword = ""
+                                                        accountMessage = "Údaje účtu byly uloženy."
+                                                        accountDialogVisible = false
+                                                    } else accountMessage = passwordResult.exception?.localizedMessage ?: "Heslo se nepodařilo změnit."
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }) { Text(if (accountBusy) "Ukládám…" else "Uložit změny") }
+                },
+                dismissButton = { TextButton(onClick = { accountDialogVisible = false }, enabled = !accountBusy) { Text("Zavřít") } }
+            )
+        }
+
         if (authDialogVisible) {
             AlertDialog(
                 onDismissRequest = { if (!authBusy) authDialogVisible = false },
                 title = { Text(if (authRegisterMode) "Registrace řidiče" else "Přihlášení") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (authRegisterMode) OutlinedTextField(value = authDriverName, onValueChange = { authDriverName = it }, label = { Text("Jméno řidiče") }, singleLine = true, enabled = !authBusy)
                         OutlinedTextField(value = authEmail, onValueChange = { authEmail = it }, label = { Text("E-mail") }, singleLine = true, enabled = !authBusy)
                         OutlinedTextField(
                             value = authPassword, onValueChange = { authPassword = it },
@@ -425,18 +502,33 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 confirmButton = {
-                    TextButton(enabled = !authBusy && authEmail.isNotBlank() && authPassword.length >= 6, onClick = {
+                    TextButton(enabled = !authBusy && authEmail.isNotBlank() && authPassword.length >= 6 && (!authRegisterMode || authDriverName.isNotBlank()), onClick = {
                         authBusy = true
                         authMessage = ""
                         val task = if (authRegisterMode) firebaseAuth.createUserWithEmailAndPassword(authEmail.trim(), authPassword)
                             else firebaseAuth.signInWithEmailAndPassword(authEmail.trim(), authPassword)
                         task.addOnCompleteListener { result ->
-                            authBusy = false
-                            if (result.isSuccessful) {
+                            if (!result.isSuccessful) {
+                                authBusy = false
+                                authMessage = result.exception?.localizedMessage ?: "Přihlášení se nezdařilo."
+                            } else if (authRegisterMode) {
+                                val profile = com.google.firebase.auth.userProfileChangeRequest { displayName = authDriverName.trim() }
+                                firebaseAuth.currentUser?.updateProfile(profile)?.addOnCompleteListener { profileResult ->
+                                    authBusy = false
+                                    if (profileResult.isSuccessful) {
+                                        authDialogVisible = false
+                                        authPassword = ""
+                                        authDriverName = ""
+                                        authMessage = ""
+                                        currentUser = firebaseAuth.currentUser
+                                    } else authMessage = profileResult.exception?.localizedMessage ?: "Jméno se nepodařilo uložit."
+                                } ?: run { authBusy = false; authMessage = "Účet se nepodařilo načíst." }
+                            } else {
+                                authBusy = false
                                 authDialogVisible = false
                                 authPassword = ""
                                 authMessage = ""
-                            } else authMessage = result.exception?.localizedMessage ?: "Přihlášení se nezdařilo."
+                            }
                         }
                     }) { Text(if (authBusy) "Čekej…" else if (authRegisterMode) "Vytvořit účet" else "Přihlásit") }
                 },
@@ -1227,6 +1319,20 @@ class MainActivity : ComponentActivity() {
                         Text("Registrace", color = Color.White)
                     }
                 } else {
+                    Text(currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Řidič", color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(vertical = 6.dp))
+                    Text(currentUser?.email ?: "", color = Color(0xFFB9C9DA), style = MaterialTheme.typography.labelSmall)
+                    Row(Modifier.fillMaxWidth().clickable {
+                        accountName = currentUser?.displayName.orEmpty()
+                        accountEmail = currentUser?.email.orEmpty()
+                        accountCurrentPassword = ""
+                        accountNewPassword = ""
+                        accountMessage = ""
+                        accountDialogVisible = true
+                        drawerScope.launch { drawerState.close() }
+                    }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
+                        Text("Účet", color = Color.White)
+                    }
                     Row(Modifier.fillMaxWidth().clickable {
                         firebaseAuth.signOut()
                         drawerScope.launch { drawerState.close() }
@@ -1234,7 +1340,6 @@ class MainActivity : ComponentActivity() {
                         Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
                         Text("Odhlásit", color = Color.White)
                     }
-                    Text(currentUser?.email ?: "", color = Color(0xFFB9C9DA), style = MaterialTheme.typography.labelSmall)
                 }
                 Row(
                     Modifier.fillMaxWidth().clickable {
