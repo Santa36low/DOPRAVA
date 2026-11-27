@@ -837,31 +837,22 @@ class MainActivity : ComponentActivity() {
                     if (page == 4) {
                         VehicleManagerScreen(userId = currentUser?.uid, navy = navy, blue = blue)
                     } else if (page == 3) {
-                        Text("Synchronizace databáze Firebase", style = MaterialTheme.typography.titleLarge, color = navy)
-                        if (currentUser == null) {
-                            Text("Pro zálohování a synchronizaci se nejdříve přihlas nebo zaregistruj v nabídce nastavení.")
-                        } else {
-                            Text("Přihlášený účet: ${currentUser?.email ?: "Firebase účet"}")
-                            Button(
-                                onClick = { uploadCloudBackup() },
-                                enabled = !cloudBusy && active == null,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(containerColor = blue)
-                            ) { Text("Zálohovat – odeslat do Firebase") }
-                            OutlinedButton(
-                                onClick = { downloadCloudBackup() },
-                                enabled = !cloudBusy && active == null,
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Synchronizace – stáhnout z Firebase") }
-                        }
-                        if (active != null) Text("Nejdříve ukonči probíhající činnost. Tím se zajistí úplná a konzistentní záloha.", color = Color(0xFF9A5B00))
-                        Text("Záloha uloží celou databázi včetně historie, GPS tras, pauz a tankování. Synchronizace stáhne poslední zálohu tohoto účtu a nahradí jí data v telefonu. Před stažením si případně nejprve vytvoř zálohu aktuálních dat.", color = Color(0xFF9A5B00))
-                        if (cloudBusy) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                            Text("Probíhá přenos databáze…")
-                        }
+                        Text("Záloha", style = MaterialTheme.typography.titleLarge, color = navy)
+                        Text("Záloha databáze do souboru v telefonu. Soubor můžeš bezpečně uložit mimo telefon a později z něj obnovit všechna data.")
+                        Button(
+                            onClick = { exportBackupLauncher.launch("Doprava-zaloha.db") },
+                            enabled = !cloudBusy && active == null,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = blue)
+                        ) { Text("Uložit zálohu do souboru") }
+                        OutlinedButton(
+                            onClick = { importBackupLauncher.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*")) },
+                            enabled = !cloudBusy && active == null,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Obnovit ze souboru") }
+                        if (active != null) Text("Před vytvořením nebo obnovením zálohy ukonči probíhající činnost.", color = Color(0xFF9A5B00))
                         if (backupMessage.isNotBlank()) Text(backupMessage, color = navy)
-                    } else if (page == 0) {
+                    }} else if (page == 0) {
                         (activities + listOf("Pauza" to Icons.Filled.Coffee)).chunked(2).forEach { pair ->
                             Row(
                                 Modifier.fillMaxWidth(),
