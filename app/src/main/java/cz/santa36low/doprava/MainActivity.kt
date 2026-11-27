@@ -261,6 +261,15 @@ class MainActivity : ComponentActivity() {
             val current = active ?: return
             if (pause != null) return
             val endedAt = System.currentTimeMillis()
+            if (current.type == "Pauza") {
+                activityNote = ""
+                pendingNoteAction = { note ->
+                    db.finish(current.id, null, null, null, null, endedAt, note)
+                    refresh()
+                }
+                noteDialogVisible = true
+                return
+            }
             withLocation { lat, lon ->
                 val save: (String?) -> Unit = { companyName ->
                     activityNote = ""
@@ -472,10 +481,12 @@ class MainActivity : ComponentActivity() {
                         InfoRow("Začátek", timeOnly(item.start))
                         InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
                         InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
-                        GpsInfoRow("GPS začátku", item.startLat, item.startLon) { lat, lon -> openGpsOnMap(lat, lon) }
-                        InfoRow("Lokace", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
-                        GpsInfoRow("GPS konce", item.endLat, item.endLon) { lat, lon -> openGpsOnMap(lat, lon) }
-                        InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                        if (item.type != "Pauza") {
+                            GpsInfoRow("GPS začátku", item.startLat, item.startLon) { lat, lon -> openGpsOnMap(lat, lon) }
+                            InfoRow("Lokace", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                            GpsInfoRow("GPS konce", item.endLat, item.endLon) { lat, lon -> openGpsOnMap(lat, lon) }
+                            InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                        }
                         if (item.type != "Pauza") {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Ujeto: %.1f km".format(Locale.getDefault(), db.routeDistanceKm(item.id)), modifier = Modifier.weight(1f), color = Color(0xFF596575))
@@ -897,9 +908,11 @@ class MainActivity : ComponentActivity() {
                         }
 
                         val pauseRecords = db.pausesForDay(periodStart, periodEnd)
+                        val pauseActivityItems = periodItems.filter { it.type == "Pauza" }
                         fun overlap(start: Long, end: Long?, from: Long, to: Long): Long =
                             (minOf(end ?: tick, to) - maxOf(start, from)).coerceAtLeast(0L)
-                        val pauseMillis = pauseRecords.sumOf { overlap(it.start, it.end, periodStart, periodEnd) }
+                        val pauseMillis = pauseRecords.sumOf { overlap(it.start, it.end, periodStart, periodEnd) } +
+                            pauseActivityItems.sumOf { overlap(it.start, it.end, periodStart, periodEnd) }
                         val activityMillis = periodItems.filter { it.type != "Pauza" }.sumOf {
                             overlap(it.start, it.end, periodStart, periodEnd)
                         }
@@ -936,6 +949,15 @@ class MainActivity : ComponentActivity() {
                                                 drawRect(Color(0xFFFF9800), androidx.compose.ui.geometry.Offset(left, 36f), androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f), 22f))
                                             }
                                         }
+                                        pauseActivityItems.forEach { pauseItem ->
+                                            val from = maxOf(pauseItem.start, dayStart)
+                                            val to = minOf(pauseItem.end ?: tick, dayEnd)
+                                            if (to > from) {
+                                                val left = width * ((from - dayStart).toFloat() / 86_400_000f)
+                                                val right = width * ((to - dayStart).toFloat() / 86_400_000f)
+                                                drawRect(Color(0xFFFF9800), androidx.compose.ui.geometry.Offset(left, 36f), androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f), 22f))
+                                            }
+                                        }
                                     }
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         listOf("00:00", "06:00", "12:00", "18:00", "24:00").forEach { Text(it, style = MaterialTheme.typography.labelSmall, color = Color(0xFF596575)) }
@@ -949,7 +971,8 @@ class MainActivity : ComponentActivity() {
                                         val startOfDay = periodStart + offset * 86_400_000L
                                         val endOfDay = minOf(startOfDay + 86_400_000L, periodEnd)
                                         val dayWork = periodItems.filter { it.type != "Pauza" }.sumOf { overlap(it.start, it.end, startOfDay, endOfDay) }
-                                        val dayPause = pauseRecords.sumOf { overlap(it.start, it.end, startOfDay, endOfDay) }
+                                        val dayPause = pauseRecords.sumOf { overlap(it.start, it.end, startOfDay, endOfDay) } +
+                                            pauseActivityItems.sumOf { overlap(it.start, it.end, startOfDay, endOfDay) }
                                         Triple(startOfDay, (dayWork - dayPause).coerceAtLeast(0L), dayPause)
                                     }
                                     val maxDay = (days.maxOfOrNull { it.second + it.third } ?: 0L).coerceAtLeast(1L)
