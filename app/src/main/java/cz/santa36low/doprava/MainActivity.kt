@@ -525,8 +525,8 @@ class MainActivity : ComponentActivity() {
                     NavigationBarItem(
                         selected = page == 2,
                         onClick = { page = 2; refresh() },
-                        icon = { Icon(Icons.Filled.LocalShipping, contentDescription = "Denní přehled", modifier = Modifier.size(30.dp)) },
-                        label = { Text("Den") },
+                        icon = { Icon(Icons.Filled.LocalShipping, contentDescription = "Graf přehledu", modifier = Modifier.size(30.dp)) },
+                        label = { Text("Graf") },
                         colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
                             indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
                     )
