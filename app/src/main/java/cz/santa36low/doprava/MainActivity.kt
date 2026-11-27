@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 confirmButton = { TextButton(onClick = { completePlace(manualPlace.trim().ifBlank { null }) }, enabled = manualPlace.isNotBlank()) { Text("Použít ruční zadání") } },
-                dismissButton = { TextButton(onClick = { completePlace(null) }) { Text("Pokračovat bez názvu") } }
+                dismissButton = { TextButton(onClick = { completePlace(null) }) { Text("Bez firmy") } }
             )
         }
 
