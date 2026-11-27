@@ -9,7 +9,7 @@ data class NearbyPlace(val name: String, val address: String)
 
 object PlaceLookup {
     fun search(latitude: Double, longitude: Double): List<NearbyPlace> {
-        val query = """[out:json][timeout:8];(node(around:600,$latitude,$longitude)["name"];way(around:600,$latitude,$longitude)["name"];relation(around:600,$latitude,$longitude)["name"];);out center tags 20;"""
+        val query = """[out:json][timeout:12];(nwr(around:800,$latitude,$longitude)["name"]["shop"];nwr(around:800,$latitude,$longitude)["name"]["office"];nwr(around:800,$latitude,$longitude)["name"]["industrial"];nwr(around:800,$latitude,$longitude)["name"]["craft"];nwr(around:800,$latitude,$longitude)["name"]["amenity"];nwr(around:800,$latitude,$longitude)["name"]["landuse"="industrial"];nwr(around:800,$latitude,$longitude)["name"]["building"~"commercial|industrial|warehouse"];);out center tags 30;"""
         val url = URL("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(query, "UTF-8"))
         val connection = (url.openConnection() as HttpURLConnection).apply {
             connectTimeout = 5000
