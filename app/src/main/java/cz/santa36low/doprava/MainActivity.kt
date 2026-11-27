@@ -142,6 +142,12 @@ class MainActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+        LaunchedEffect(Unit) {
+            if (!hasLocation()) {
+                permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            }
+        }
+
         fun withLocation(done: (Double?, Double?) -> Unit) {
             if (!hasLocation()) {
                 permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
@@ -704,28 +710,16 @@ class MainActivity : ComponentActivity() {
                                         }
                                         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                             item.company?.let { InfoRow("Firma", it) }
-                                            item.note.takeIf { it.isNotBlank() }?.let { InfoRow("Poznámka", it) }
                                             InfoRow("Datum", dateOnly(item.start))
-                                            InfoRow("GPS začátku", coordinates(item.startLat, item.startLon))
-                                            InfoRow("Lokace", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
-                                            InfoRow("GPS konce", coordinates(item.endLat, item.endLon))
-                                            InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
                                             InfoRow("Začátek", timeOnly(item.start))
                                             InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
                                             InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
-                                        }
-                                        if (item.type != "Pauza") {
-                                            val kilometers = db.routeDistanceKm(item.id)
-                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text("Ujeto: %.1f km".format(Locale.getDefault(), kilometers), color = navy,
-                                                    style = MaterialTheme.typography.titleMedium)
-                                                IconButton(onClick = {
-                                                    startActivity(Intent(this@MainActivity, TrackMapActivity::class.java)
-                                                        .putExtra("activity_id", item.id))
-                                                }) {
-                                                    Icon(Icons.Filled.Map, contentDescription = "Zobrazit trasu na mapě", tint = blue, modifier = Modifier.size(30.dp))
-                                                }
+                                            GpsInfoRow("GPS začátku", item.startLat, item.startLon) { lat, lon -> openGpsOnMap(lat, lon) }
+                                            InfoRow("Lokace", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                                            GpsInfoRow("GPS konce", item.endLat, item.endLon) { lat, lon -> openGpsOnMap(lat, lon) }
+                                            InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                                            if (item.type != "Pauza") {
+                                                InfoRow("Ujeto", "%.1f km".format(Locale.getDefault(), db.routeDistanceKm(item.id)))
                                             }
                                         }
                                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -812,6 +806,21 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+    private fun GpsInfoRow(label: String, lat: Double?, lon: Double?, onMapClick: (Double, Double) -> Unit) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("$label:", modifier = Modifier.weight(1f), color = Color(0xFF596575))
+            Row(modifier = Modifier.weight(1.5f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+                Text(coordinates(lat, lon), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                if (lat != null && lon != null) {
+                    IconButton(onClick = { onMapClick(lat, lon) }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Filled.Map, contentDescription = "Zobrazit $label na mapě", tint = Color(0xFF14558A))
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
     private fun InfoRow(label: String, value: String) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween) {
             Text("$label:", modifier = Modifier.weight(1f), color = Color(0xFF596575))
@@ -820,6 +829,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun coordinates(lat: Double?, lon: Double?): String = if (lat != null && lon != null) "%.5f, %.5f".format(Locale.US, lat, lon) else "Není k dispozici"
+
+    private fun openGpsOnMap(lat: Double, lon: Double) {
+        val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon")
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(this, "V telefonu není dostupná mapová aplikace.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
     private fun dateOnly(ms: Long) = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(ms))
     private fun timeOnly(ms: Long) = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(ms))
     private fun date(ms: Long) = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date(ms))
