@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -600,7 +601,7 @@ class MainActivity : ComponentActivity() {
                         Text("Pozor: obnovení nahradí současnou historii obsahem záložního souboru. Před obnovou si případně nejprve ulož aktuální zálohu.", color = Color(0xFF9A5B00))
                         if (backupMessage.isNotBlank()) Text(backupMessage, color = navy)
                     } else if (page == 0) {
-                        (activities + listOf("Pauza" to Icons.Filled.Coffee)).chunked(2).forEach { pair ->
+                        (activities + listOf("Pauza" to Icons.Filled.PauseCircle)).chunked(2).forEach { pair ->
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -812,7 +813,8 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             filteredHistory.forEach { item ->
-                                val itemIcon = activities.firstOrNull { it.first == item.type }?.second ?: Icons.Filled.LocalShipping
+                                val itemIcon = if (item.type == "Pauza") Icons.Filled.PauseCircle
+                                    else activities.firstOrNull { it.first == item.type }?.second ?: Icons.Filled.LocalShipping
                                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color.White)) {
                                     Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -828,10 +830,12 @@ class MainActivity : ComponentActivity() {
                                             InfoRow("Začátek", timeOnly(item.start))
                                             InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
                                             InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
-                                            GpsInfoRow("GPS začátku", item.startLat, item.startLon) { lat, lon -> openGpsOnMap(lat, lon) }
-                                            InfoRow("Lokace", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
-                                            GpsInfoRow("GPS konce", item.endLat, item.endLon) { lat, lon -> openGpsOnMap(lat, lon) }
-                                            InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                                            if (item.type != "Pauza") {
+                                                GpsInfoRow("GPS začátku", item.startLat, item.startLon) { lat, lon -> openGpsOnMap(lat, lon) }
+                                                InfoRow("Lokace", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                                                GpsInfoRow("GPS konce", item.endLat, item.endLon) { lat, lon -> openGpsOnMap(lat, lon) }
+                                                InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                                            }
                                             if (item.type != "Pauza") {
                                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                                     Text("Ujeto: %.1f km".format(Locale.getDefault(), db.routeDistanceKm(item.id)), modifier = Modifier.weight(1f), color = Color(0xFF596575))
