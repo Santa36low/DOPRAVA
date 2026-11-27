@@ -43,7 +43,7 @@ class TrackMapActivity : Activity() {
                 )
 
                 val redMarker = IconFactory.getInstance(this)
-                    .defaultMarker(0f)
+                    .defaultMarker()
                 map.addMarker(
                     MarkerOptions()
                         .position(route.first())
