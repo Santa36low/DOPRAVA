@@ -157,7 +157,14 @@ class MainActivity : ComponentActivity() {
             if (lat == null || lon == null) return
             Thread {
                 val results = runCatching { PlaceLookup.search(lat, lon) }.getOrDefault(emptyList())
-                runOnUiThread { placeResults = results; placeLoading = false }
+                runOnUiThread {
+                    placeResults = results
+                    if (results.isNotEmpty() && manualPlace.isBlank()) {
+                        val first = results.first()
+                        manualPlace = if (first.address.isBlank()) first.name else first.name + ", " + first.address
+                    }
+                    placeLoading = false
+                }
             }.start()
         }
 
