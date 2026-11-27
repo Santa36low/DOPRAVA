@@ -286,7 +286,7 @@ class MainActivity : ComponentActivity() {
                                 contentResolver.openInputStream(uri)?.use { input -> temp.outputStream().use { input.copyTo(it) } }
                                     ?: throw IllegalStateException("Soubor nelze přečíst")
                                 val header = temp.inputStream().use { ByteArray(16).also { bytes -> it.read(bytes) } }
-                                if (String(header, Charsets.US_ASCII) != "SQLite format 3\\u0000") throw IllegalArgumentException("Vybraný soubor není platná záloha aplikace Doprava")
+                                if (String(header, 0, 15, Charsets.US_ASCII) != "SQLite format 3" || header[15].toInt() != 0) throw IllegalArgumentException("Vybraný soubor není platná záloha aplikace Doprava")
                                 db.close()
                                 val databaseFile = getDatabasePath("doprava.db")
                                 File(databaseFile.path + "-wal").delete()
