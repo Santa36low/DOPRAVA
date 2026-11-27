@@ -163,9 +163,10 @@ class MainActivity : ComponentActivity() {
 
         fun startSelected() {
             if (active != null) return
+            val startedAt = System.currentTimeMillis()
             withLocation { lat, lon ->
                 val begin: (String?) -> Unit = { companyName ->
-                    val id = db.start(selectedType, lat, lon, null, companyName)
+                    val id = db.start(selectedType, lat, lon, null, companyName, startedAt)
                     if (selectedType != "Pauza" && lat != null && lon != null) db.addRoutePoint(id, lat, lon)
                     if (selectedType != "Pauza" && hasLocation()) {
                         try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", id)) } catch (_: Exception) { }
@@ -180,10 +181,11 @@ class MainActivity : ComponentActivity() {
         fun finishActive() {
             val current = active ?: return
             if (pause != null) return
+            val endedAt = System.currentTimeMillis()
             withLocation { lat, lon ->
                 val save: (String?) -> Unit = { companyName ->
                     if (current.type != "Pauza" && lat != null && lon != null) db.addRoutePoint(current.id, lat, lon)
-                    db.finish(current.id, lat, lon, companyName, if (current.type == "Výkladka") companyName else null)
+                    db.finish(current.id, lat, lon, companyName, if (current.type == "Výkladka") companyName else null, endedAt)
                     stopService(Intent(this, RouteTrackingService::class.java))
                     refresh()
                 }
