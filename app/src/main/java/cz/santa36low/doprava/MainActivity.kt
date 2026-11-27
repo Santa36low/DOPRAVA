@@ -91,7 +91,14 @@ class MainActivity : ComponentActivity() {
 
         val permissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
-        ) { }
+        ) { permissions ->
+            if (permissions.values.any { it }) {
+                val running = active
+                if (running != null && running.type != "Pauza") {
+                    try { ContextCompat.startForegroundService(this, Intent(this, RouteTrackingService::class.java).putExtra("activity_id", running.id)) } catch (_: Exception) { }
+                }
+            }
+        }
 
         LaunchedEffect(Unit) {
             while (true) {
@@ -180,7 +187,7 @@ class MainActivity : ComponentActivity() {
                     withLocation { lat, lon ->
                         if (lat != null && lon != null) {
                             db.updateStartLocation(id, lat, lon)
-                            db.addRoutePoint(id, lat, lon, startedAt)
+                            db.addRoutePoint(id, lat, lon)
                             refresh()
                         }
                     }
