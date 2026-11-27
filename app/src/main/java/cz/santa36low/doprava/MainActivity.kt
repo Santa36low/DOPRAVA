@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
         var pendingLongitude by remember { mutableDoubleStateOf(0.0) }
         var editingItem by remember { mutableStateOf<ActivityRecord?>(null) }
         var deletingItem by remember { mutableStateOf<ActivityRecord?>(null) }
+        var detailItem by remember { mutableStateOf<ActivityRecord?>(null) }
         var editType by remember { mutableStateOf("") }
         var editStart by remember { mutableStateOf("") }
         var editEnd by remember { mutableStateOf("") }
@@ -453,6 +454,37 @@ class MainActivity : ComponentActivity() {
                     }) { Text("Smazat") }
                 },
                 dismissButton = { TextButton(onClick = { deletingItem = null }) { Text("Zrušit") } }
+            )
+        }
+
+        if (detailItem != null) {
+            val item = detailItem!!
+            AlertDialog(
+                onDismissRequest = { detailItem = null },
+                title = { Text("Detail činnosti · ${item.type}") },
+                text = {
+                    Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item.company?.let { InfoRow("Firma", it) }
+                        item.note.takeIf { it.isNotBlank() }?.let { InfoRow("Poznámka", it) }
+                        InfoRow("Datum", dateOnly(item.start))
+                        InfoRow("Začátek", timeOnly(item.start))
+                        InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
+                        InfoRow("Trvání", item.end?.let { formatDuration(it - item.start - db.pauseDurationMillis(item.id)) } ?: formatDuration(tick - item.start - db.pauseDurationMillis(item.id)))
+                        GpsInfoRow("GPS začátku", item.startLat, item.startLon) { lat, lon -> openGpsOnMap(lat, lon) }
+                        InfoRow("Lokace", item.startPlace ?: if (item.startLat != null && item.startLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                        GpsInfoRow("GPS konce", item.endLat, item.endLon) { lat, lon -> openGpsOnMap(lat, lon) }
+                        InfoRow("Lokace", item.endPlace ?: if (item.endLat != null && item.endLon != null) "Místo se nepodařilo určit" else "Není k dispozici")
+                        if (item.type != "Pauza") {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Ujeto: %.1f km".format(Locale.getDefault(), db.routeDistanceKm(item.id)), modifier = Modifier.weight(1f), color = Color(0xFF596575))
+                                IconButton(onClick = {
+                                    startActivity(Intent(this@MainActivity, TrackMapActivity::class.java).putExtra("activity_id", item.id))
+                                }) { Icon(Icons.Filled.Map, contentDescription = "Zobrazit projetou trasu", tint = blue) }
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { detailItem = null }) { Text("Zavřít") } }
             )
         }
 
@@ -820,63 +852,117 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     } else {
-                        val cal = Calendar.getInstance().apply {
+                        val periodCalendar = Calendar.getInstance().apply {
                             timeInMillis = selectedDay
                             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                            when (historyMode) {
+                                "Týden" -> {
+                                    val offset = (get(Calendar.DAY_OF_WEEK) + 5) % 7
+                                    add(Calendar.DAY_OF_MONTH, -offset)
+                                }
+                                "Měsíc" -> set(Calendar.DAY_OF_MONTH, 1)
+                            }
                         }
-                        val dayStart = cal.timeInMillis
-                        val dayEnd = dayStart + 86400000L
-                        val dayItems = history.filter { it.start < dayEnd && (it.end ?: tick) >= dayStart }
-                        val dayPauses = db.pausesForDay(dayStart, dayEnd)
+                        val periodStart = periodCalendar.timeInMillis
+                        val periodEnd = Calendar.getInstance().apply {
+                            timeInMillis = periodStart
+                            when (historyMode) {
+                                "Den" -> add(Calendar.DAY_OF_MONTH, 1)
+                                "Týden" -> add(Calendar.DAY_OF_MONTH, 7)
+                                else -> add(Calendar.MONTH, 1)
+                            }
+                        }.timeInMillis
+                        val periodItems = history.filter { it.start < periodEnd && (it.end ?: tick) > periodStart }
+                        val periodLabel = when (historyMode) {
+                            "Den" -> dateOnly(periodStart)
+                            "Týden" -> dateOnly(periodStart) + " – " + dateOnly(periodEnd - 1)
+                            else -> SimpleDateFormat("LLLL yyyy", Locale.getDefault()).format(Date(periodStart))
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            listOf("Den", "Týden", "Měsíc").forEach { mode ->
+                                FilterChip(selected = historyMode == mode, onClick = { historyMode = mode }, label = { Text(mode) })
+                            }
+                        }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("‹", modifier = Modifier.clickable { selectedDay -= 86400000L }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
-                            Text("Denní přehled · " + dateOnly(dayStart), style = MaterialTheme.typography.titleLarge, color = navy)
-                            Text("›", modifier = Modifier.clickable { selectedDay += 86400000L }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
+                            Text("‹", modifier = Modifier.clickable {
+                                val cal = Calendar.getInstance().apply { timeInMillis = selectedDay }
+                                when (historyMode) {
+                                    "Den" -> cal.add(Calendar.DAY_OF_MONTH, -1)
+                                    "Týden" -> cal.add(Calendar.DAY_OF_MONTH, -7)
+                                    else -> cal.add(Calendar.MONTH, -1)
+                                }
+                                selectedDay = cal.timeInMillis
+                            }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
+                            Text(periodLabel, modifier = Modifier.clickable {
+                                val cal = Calendar.getInstance().apply { timeInMillis = selectedDay }
+                                DatePickerDialog(this@MainActivity, { _, year, month, day ->
+                                    selectedDay = Calendar.getInstance().apply {
+                                        set(year, month, day, 12, 0, 0)
+                                        set(Calendar.MILLISECOND, 0)
+                                    }.timeInMillis
+                                }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+                            }.padding(8.dp), style = MaterialTheme.typography.titleMedium, color = navy)
+                            Text("›", modifier = Modifier.clickable {
+                                val cal = Calendar.getInstance().apply { timeInMillis = selectedDay }
+                                when (historyMode) {
+                                    "Den" -> cal.add(Calendar.DAY_OF_MONTH, 1)
+                                    "Týden" -> cal.add(Calendar.DAY_OF_MONTH, 7)
+                                    else -> cal.add(Calendar.MONTH, 1)
+                                }
+                                selectedDay = cal.timeInMillis
+                            }.padding(8.dp), style = MaterialTheme.typography.headlineMedium)
                         }
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Časová osa 00:00–24:00", color = navy, style = MaterialTheme.typography.titleMedium)
-                                Canvas(Modifier.fillMaxWidth().height(70.dp)) {
-                                    drawRoundRect(Color(0xFFE8EDF4), cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f,10f))
-                                    dayItems.forEach { item ->
-                                        val left = (((maxOf(item.start,dayStart)-dayStart).toFloat()/86400000f)*size.width).coerceIn(0f,size.width)
-                                        val right = (((minOf(item.end ?: tick,dayEnd)-dayStart).toFloat()/86400000f)*size.width).coerceIn(left,size.width)
-                                        drawRoundRect(blue, topLeft = androidx.compose.ui.geometry.Offset(left,8f),
-                                            size = androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f),54f),
-                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(5f,5f))
+
+                        val chartRows = periodItems.groupBy { it.type }.map { (type, records) ->
+                            val millis = records.sumOf { item ->
+                                (minOf(item.end ?: tick, periodEnd) - maxOf(item.start, periodStart)).coerceAtLeast(0L)
+                            }
+                            type to millis
+                        }.filter { it.second > 0L }.sortedByDescending { it.second }
+                        val maxDuration = chartRows.maxOfOrNull { it.second } ?: 1L
+                        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("Graf činností", style = MaterialTheme.typography.titleLarge, color = navy)
+                                if (chartRows.isEmpty()) {
+                                    Text("Pro vybrané období nejsou žádné činnosti.")
+                                } else {
+                                    chartRows.forEach { (type, duration) ->
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text(type, color = navy)
+                                                Text(formatDuration(duration), color = Color(0xFF596575))
+                                            }
+                                            Box(Modifier.fillMaxWidth().height(13.dp).background(Color(0xFFE8EDF4), RoundedCornerShape(20.dp))) {
+                                                Box(Modifier.fillMaxWidth((duration.toFloat() / maxDuration.toFloat()).coerceIn(0f, 1f))
+                                                    .fillMaxHeight().background(blue, RoundedCornerShape(20.dp)))
+                                            }
+                                        }
                                     }
-                                    dayPauses.forEach { item ->
-                                        val left = (((maxOf(item.start,dayStart)-dayStart).toFloat()/86400000f)*size.width).coerceIn(0f,size.width)
-                                        val right = (((minOf(item.end ?: tick,dayEnd)-dayStart).toFloat()/86400000f)*size.width).coerceIn(left,size.width)
-                                        drawRoundRect(Color(0xFFFFB21A), topLeft = androidx.compose.ui.geometry.Offset(left,8f),
-                                            size = androidx.compose.ui.geometry.Size((right-left).coerceAtLeast(2f),54f),
-                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(5f,5f))
+                                }
+                            }
+                        }
+
+                        Text("Jednotlivé činnosti", style = MaterialTheme.typography.titleLarge, color = navy)
+                        if (periodItems.isEmpty()) {
+                            Text("Pro toto období nejsou žádné záznamy.")
+                        } else {
+                            periodItems.sortedByDescending { it.start }.forEach { item ->
+                                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
+                                        item.company?.let { Text(it, color = Color(0xFF596575)) }
+                                        Text(dateOnly(item.start) + " · " + timeOnly(item.start) + " – " + (item.end?.let { timeOnly(it) } ?: "probíhá"))
+                                        Text("Trvání: " + formatDuration((minOf(item.end ?: tick, periodEnd) - maxOf(item.start, periodStart)).coerceAtLeast(0L)))
+                                        OutlinedButton(onClick = { detailItem = item }, modifier = Modifier.fillMaxWidth()) {
+                                            Icon(Icons.Filled.History, contentDescription = null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Zobrazit celý detail činnosti")
+                                        }
                                     }
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Text("■ Činnost", color = blue); Text("■ Pauza", color = Color(0xFFB47B00)) }
                             }
                         }
-                        if (dayItems.isEmpty() && dayPauses.isEmpty()) Text("Pro tento den nejsou žádné záznamy.")
-                        dayItems.forEach { item ->
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text(item.type, style = MaterialTheme.typography.titleMedium, color = navy)
-                                    Text(timeOnly(maxOf(item.start,dayStart)) + " – " + (item.end?.let { timeOnly(minOf(it,dayEnd)) } ?: "probíhá"))
-                                    Text("Trvání: " + formatDuration(((item.end ?: tick).coerceAtMost(dayEnd)-item.start.coerceAtLeast(dayStart)).coerceAtLeast(0)))
-                                }
-                            }
-                        }
-                        dayPauses.forEach { item ->
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E5))) {
-                                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text("Pauza", style = MaterialTheme.typography.titleMedium, color = Color(0xFF946000))
-                                    Text(timeOnly(maxOf(item.start,dayStart)) + " – " + (item.end?.let { timeOnly(minOf(it,dayEnd)) } ?: "probíhá"))
-                                    Text("Trvání: " + formatDuration(((item.end ?: tick).coerceAtMost(dayEnd)-item.start.coerceAtLeast(dayStart)).coerceAtLeast(0)))
-                                }
-                            }
-                        }
-                    }
-                }
+                    }                }
                 Spacer(Modifier.height(8.dp))
             }
         }
