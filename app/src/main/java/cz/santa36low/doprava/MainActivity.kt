@@ -821,7 +821,9 @@ class MainActivity : ComponentActivity() {
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (page == 3) {
+                    if (page == 4) {
+                        VehicleManagerScreen(userId = currentUser?.uid, navy = navy, blue = blue)
+                    } else if (page == 3) {
                         Text("Synchronizace databáze Firebase", style = MaterialTheme.typography.titleLarge, color = navy)
                         if (currentUser == null) {
                             Text("Pro zálohování a synchronizaci se nejdříve přihlas nebo zaregistruj v nabídce nastavení.")
@@ -1340,6 +1342,17 @@ class MainActivity : ComponentActivity() {
                         Icon(Icons.Filled.Settings, contentDescription = null, tint = Color.White)
                         Text("Odhlásit", color = Color.White)
                     }
+                }
+                Row(
+                    Modifier.fillMaxWidth().clickable {
+                        page = 4
+                        drawerScope.launch { drawerState.close() }
+                    }.padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Filled.LocalShipping, contentDescription = null, tint = Color.White)
+                    Text("Vozidla", color = Color.White)
                 }
                 Row(
                     Modifier.fillMaxWidth().clickable {
