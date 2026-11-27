@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -853,11 +854,13 @@ class MainActivity : ComponentActivity() {
         if (drawerState.isOpen) {
             Box(
                 Modifier.fillMaxSize()
+                    .padding(top = 104.dp)
                     .background(Color.Black.copy(alpha = 0.28f))
                     .clickable { drawerScope.launch { drawerState.close() } }
             )
             Column(
                 Modifier.align(Alignment.TopEnd)
+                    .padding(top = 104.dp)
                     .fillMaxHeight()
                     .width(IntrinsicSize.Max)
                     .widthIn(min = 168.dp, max = 240.dp)
