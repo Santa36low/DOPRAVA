@@ -82,6 +82,9 @@ class MainActivity : ComponentActivity() {
         var manualPlace by remember { mutableStateOf("") }
         var pendingPlaceAction by remember { mutableStateOf<((String?) -> Unit)?>(null) }
         var placeDialogTitle by remember { mutableStateOf("Potvrzení firmy") }
+        var noteDialogVisible by remember { mutableStateOf(false) }
+        var activityNote by remember { mutableStateOf("") }
+        var pendingNoteAction by remember { mutableStateOf<((String) -> Unit)?>(null) }
         var pendingLatitude by remember { mutableDoubleStateOf(0.0) }
         var pendingLongitude by remember { mutableDoubleStateOf(0.0) }
         var editingItem by remember { mutableStateOf<ActivityRecord?>(null) }
@@ -249,19 +252,23 @@ class MainActivity : ComponentActivity() {
             val endedAt = System.currentTimeMillis()
             withLocation { lat, lon ->
                 val save: (String?) -> Unit = { companyName ->
-                    if (current.type != "Pauza" && lat != null && lon != null) db.addRoutePoint(current.id, lat, lon)
-                    db.finish(current.id, lat, lon, null, companyName, endedAt)
-                    if (lat != null && lon != null) {
-                        Thread {
-                            val locationName = runCatching { PlaceLookup.reverseGeocode(lat, lon) }.getOrNull()
-                            if (!locationName.isNullOrBlank()) {
-                                db.updateEndPlace(current.id, locationName)
-                                runOnUiThread { refresh() }
-                            }
-                        }.start()
+                    activityNote = ""
+                    pendingNoteAction = { note ->
+                        if (current.type != "Pauza" && lat != null && lon != null) db.addRoutePoint(current.id, lat, lon)
+                        db.finish(current.id, lat, lon, null, companyName, endedAt, note)
+                        if (lat != null && lon != null) {
+                            Thread {
+                                val locationName = runCatching { PlaceLookup.reverseGeocode(lat, lon) }.getOrNull()
+                                if (!locationName.isNullOrBlank()) {
+                                    db.updateEndPlace(current.id, locationName)
+                                    runOnUiThread { refresh() }
+                                }
+                            }.start()
+                        }
+                        stopService(Intent(this, RouteTrackingService::class.java))
+                        refresh()
                     }
-                    stopService(Intent(this, RouteTrackingService::class.java))
-                    refresh()
+                    noteDialogVisible = true
                 }
                 if (current.type == "Výkladka" || current.type == "Nákladka") {
                     val title = if (current.type == "Nákladka") "Potvrzení firmy při nákladce" else "Potvrzení firmy při výkladce"
@@ -330,6 +337,39 @@ class MainActivity : ComponentActivity() {
                 },
                 confirmButton = { TextButton(onClick = { completePlace(manualPlace.trim().ifBlank { null }) }, enabled = manualPlace.isNotBlank()) { Text("Potvrdit firmu") } },
                 dismissButton = { }
+            )
+        }
+
+        if (noteDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { },
+                title = { Text("Poznámka k činnosti") },
+                text = {
+                    OutlinedTextField(
+                        value = activityNote,
+                        onValueChange = { activityNote = it },
+                        label = { Text("Poznámka (nepovinná)") },
+                        placeholder = { Text("Můžeš doplnit poznámku…") },
+                        minLines = 2,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        noteDialogVisible = false
+                        val action = pendingNoteAction
+                        pendingNoteAction = null
+                        action?.invoke(activityNote.trim())
+                    }) { Text("Uložit a ukončit") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        noteDialogVisible = false
+                        val action = pendingNoteAction
+                        pendingNoteAction = null
+                        action?.invoke("")
+                    }) { Text("Přeskočit") }
+                }
             )
         }
 
@@ -710,6 +750,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                             item.company?.let { InfoRow("Firma", it) }
+                                            item.note.takeIf { it.isNotBlank() }?.let { InfoRow("Poznámka", it) }
                                             InfoRow("Datum", dateOnly(item.start))
                                             InfoRow("Začátek", timeOnly(item.start))
                                             InfoRow("Konec", item.end?.let { timeOnly(it) } ?: "Právě probíhá")
