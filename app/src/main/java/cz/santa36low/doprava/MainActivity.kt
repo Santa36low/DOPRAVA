@@ -495,8 +495,7 @@ class MainActivity : ComponentActivity() {
                             "Týden" -> dateOnly(periodStart) + " – " + dateOnly(periodEnd - 1)
                             else -> SimpleDateFormat("LLLL yyyy", Locale.getDefault()).format(Date(periodStart))
                         }
-                        Text("Historie činností", style = MaterialTheme.typography.titleLarge, color = navy)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                             listOf("Den", "Týden", "Měsíc").forEach { mode ->
                                 FilterChip(
                                     selected = historyMode == mode,
