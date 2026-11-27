@@ -16,13 +16,14 @@ data class ActivityRecord(
     val endLat: Double? = null,
     val endLon: Double? = null,
     val startPlace: String? = null,
-    val endPlace: String? = null
+    val endPlace: String? = null,
+    val company: String? = null
 )
 data class FuelRecord(val id: Long, val liters: Double, val time: Long, val latitude: Double?, val longitude: Double?)
 
-class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null, 4) {
+class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null, 5) {
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE activities(id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER, start_lat REAL, start_lon REAL, end_lat REAL, end_lon REAL, start_place TEXT, end_place TEXT, note TEXT DEFAULT '')")
+        db.execSQL("CREATE TABLE activities(id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER, start_lat REAL, start_lon REAL, end_lat REAL, end_lon REAL, start_place TEXT, end_place TEXT, company TEXT, note TEXT DEFAULT '')")
         db.execSQL("CREATE TABLE fuel(id INTEGER PRIMARY KEY AUTOINCREMENT, liters REAL NOT NULL, time INTEGER NOT NULL, lat REAL, lon REAL)")
         db.execSQL("CREATE TABLE route_points(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, time INTEGER NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL)")
         db.execSQL("CREATE TABLE pauses(id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER)")
@@ -76,9 +77,32 @@ class Database(context: Context) : SQLiteOpenHelper(context, "doprava.db", null,
     }
 
     fun history(): List<ActivityRecord> = readableDatabase.rawQuery(
-        "SELECT id,type,start_time,end_time,note,start_lat,start_lon,end_lat,end_lon FROM activities ORDER BY id DESC LIMIT 100", null
+        "SELECT id,type,start_time,end_time,note,start_lat,start_lon,end_lat,end_lon,start_place,end_place,company FROM activities ORDER BY id DESC LIMIT 100", null
     ).use { c -> buildList { while (c.moveToNext()) add(readActivity(c)) } }
 
+
+
+    fun updateActivity(id: Long, type: String, start: Long, end: Long?, startPlace: String?, endPlace: String?, company: String?, note: String) {
+        val v = ContentValues().apply {
+            put("type", type); put("start_time", start)
+            if (end == null) putNull("end_time") else put("end_time", end)
+            if (startPlace.isNullOrBlank()) putNull("start_place") else put("start_place", startPlace)
+            if (endPlace.isNullOrBlank()) putNull("end_place") else put("end_place", endPlace)
+            if (company.isNullOrBlank()) putNull("company") else put("company", company)
+            put("note", note)
+        }
+        writableDatabase.update("activities", v, "id=?", arrayOf(id.toString()))
+    }
+
+    fun deleteActivity(id: Long) {
+        writableDatabase.beginTransaction()
+        try {
+            writableDatabase.delete("route_points", "activity_id=?", arrayOf(id.toString()))
+            writableDatabase.delete("pauses", "activity_id=?", arrayOf(id.toString()))
+            writableDatabase.delete("activities", "id=?", arrayOf(id.toString()))
+            writableDatabase.setTransactionSuccessful()
+        } finally { writableDatabase.endTransaction() }
+    }
 
     fun activePause(): Pair<Long, Long>? = readableDatabase.rawQuery(
         "SELECT id,start_time FROM pauses WHERE end_time IS NULL ORDER BY id DESC LIMIT 1", null
