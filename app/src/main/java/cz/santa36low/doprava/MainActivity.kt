@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.material.icons.filled.Settings
@@ -801,6 +802,14 @@ class MainActivity : ComponentActivity() {
                         )
                     )
                     NavigationBarItem(
+                        selected = page == 5,
+                        onClick = { page = 5 },
+                        icon = { Icon(Icons.Filled.Directions, contentDescription = "Navigace", modifier = Modifier.size(30.dp)) },
+                        label = { Text("Navigace") },
+                        colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
+                            indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
+                    )
+                    NavigationBarItem(
                         selected = page == 2,
                         onClick = { page = 2; refresh() },
                         icon = { Icon(Icons.Filled.ShowChart, contentDescription = "Graf přehledu", modifier = Modifier.size(30.dp)) },
@@ -853,7 +862,22 @@ class MainActivity : ComponentActivity() {
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (page == 4) {
+                    if (page == 5) {
+                        Text("Navigace", style = MaterialTheme.typography.titleLarge, color = navy)
+                        Text("Vlastní plánování trasy podle parametrů právě vybraného vozidla. První verze zobrazí trasu na mapě, bez hlasových pokynů a živých dopravních informací.")
+                        if (currentUser == null) {
+                            Text("Pro navigaci se nejdříve přihlas a přidej vozidlo v nabídce Vozidla.")
+                        } else {
+                            Button(
+                                onClick = {
+                                    startActivity(Intent(this@MainActivity, NavigationActivity::class.java)
+                                        .putExtra("user_id", currentUser!!.uid))
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = blue)
+                            ) { Text("Otevřít navigaci") }
+                        }
+                    } else if (page == 4) {
                         VehicleManagerScreen(userId = currentUser?.uid, navy = navy, blue = blue)
                     } else if (page == 3) {
                         Text("Záloha", style = MaterialTheme.typography.titleLarge, color = navy)
