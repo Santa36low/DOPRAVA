@@ -9,10 +9,11 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -39,7 +40,7 @@ class NavigationActivity : Activity() {
     private lateinit var destinationInput: EditText
     private lateinit var statusText: TextView
     private lateinit var routeButton: Button
-    private lateinit var bridgeCheck: CheckBox
+    private lateinit var routePreference: RadioGroup
     private lateinit var progress: ProgressBar
     private var currentLocation: Location? = null
     private var vehicleHeight = 0.0
@@ -48,6 +49,8 @@ class NavigationActivity : Activity() {
     private var routePoints: List<LatLng> = emptyList()
     private var mapReady = false
     private var routeSummary = ""
+    // Default route style: prefer main roads.
+    private var preferMainRoads = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,15 +84,35 @@ class NavigationActivity : Activity() {
         root.addView(title)
         destinationInput = EditText(this).apply {
             hint = "Zadej cílové místo nebo adresu"
-            singleLine = true
+            isSingleLine = true
             textSize = 16f
         }
         root.addView(destinationInput, LinearLayout.LayoutParams(-1, -2))
-        bridgeCheck = CheckBox(this).apply {
-            text = "Vyhnout se mostům"
-            isChecked = true
+        val preferenceTitle = TextView(this).apply {
+            text = "Možnosti trasy"
+            textSize = 14f
+            setTextColor(Color.rgb(20, 54, 86))
+            setPadding(4, 8, 4, 2)
         }
-        root.addView(bridgeCheck)
+        root.addView(preferenceTitle)
+        routePreference = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+            val mainRoads = RadioButton(this@NavigationActivity).apply {
+                id = View.generateViewId()
+                text = "Upřednostňovat hlavní komunikace"
+                isChecked = true
+            }
+            val balanced = RadioButton(this@NavigationActivity).apply {
+                id = View.generateViewId()
+                text = "Vyvážená trasa"
+            }
+            addView(mainRoads)
+            addView(balanced)
+            setOnCheckedChangeListener { group, checkedId ->
+                preferMainRoads = checkedId == mainRoads.id
+            }
+        }
+        root.addView(routePreference)
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -195,7 +218,7 @@ class NavigationActivity : Activity() {
         thread {
             try {
                 val target = geocode(destination)
-                val route = requestTruckRoute(origin.latitude, origin.longitude, target.first, target.second, bridgeCheck.isChecked)
+                val route = requestTruckRoute(origin.latitude, origin.longitude, target.first, target.second, preferMainRoads)
                 runOnUiThread {
                     routePoints = route.first
                     routeSummary = route.second
@@ -229,7 +252,7 @@ class NavigationActivity : Activity() {
         } finally { connection.disconnect() }
     }
 
-    private fun requestTruckRoute(startLat: Double, startLon: Double, endLat: Double, endLon: Double, avoidBridges: Boolean): Pair<List<LatLng>, String> {
+    private fun requestTruckRoute(startLat: Double, startLon: Double, endLat: Double, endLon: Double, preferMainRoads: Boolean): Pair<List<LatLng>, String> {
         val connection = (URL("https://valhalla1.openstreetmap.de/route").openConnection() as HttpURLConnection)
         connection.requestMethod = "POST"
         connection.doOutput = true
@@ -248,9 +271,8 @@ class NavigationActivity : Activity() {
                 .put("height", vehicleHeight)
                 .put("width", vehicleWidth)
                 .put("weight", vehicleWeight)
-                .put("use_highways", 0.8)
-                .put("low_class_factor", 3.0)
-                .put("exclude_bridge", avoidBridges)))
+                .put("use_highways", if (preferMainRoads) 0.95 else 0.45)
+                .put("low_class_factor", if (preferMainRoads) 3.0 else 1.0)))
         }
         try {
             connection.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
