@@ -811,8 +811,11 @@ class MainActivity : ComponentActivity() {
                     )
 
                     NavigationBarItem(
-                        selected = page == 5,
-                        onClick = { page = 5 },
+                        selected = false,
+                        onClick = {
+                            startActivity(Intent(this@MainActivity, NavigationActivity::class.java)
+                                .putExtra("user_id", currentUser?.uid))
+                        },
                         icon = { Icon(Icons.Filled.Directions, contentDescription = "Navigace", modifier = Modifier.size(30.dp)) },
                         label = { Text("Navigace") },
                         colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
