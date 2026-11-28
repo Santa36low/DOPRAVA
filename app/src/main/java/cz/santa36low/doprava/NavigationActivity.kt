@@ -115,6 +115,19 @@ class NavigationActivity : Activity() {
         panel.addView(startInput)
         destinationInput = field("Kam chceš jet?")
         panel.addView(destinationInput)
+        val placeActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        placeActions.addView(Button(this).apply {
+            text = "☆ Uložit cíl"
+            setOnClickListener { saveFavoriteDestination() }
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        placeActions.addView(Button(this).apply {
+            text = "Oblíbené / nedávné"
+            setOnClickListener { showSavedPlaces() }
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        panel.addView(placeActions)
         stopsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         panel.addView(stopsContainer)
         panel.addView(Button(this).apply {
@@ -193,6 +206,57 @@ class NavigationActivity : Activity() {
         setPadding(10, 7, 10, 7)
     }
 
+    private fun savedPlaces() = getSharedPreferences("navigation_places", MODE_PRIVATE)
+
+    private fun readPlaceList(key: String): MutableList<String> {
+        val array = try { JSONArray(savedPlaces().getString(key, "[]")) } catch (_: Exception) { JSONArray() }
+        return MutableList(array.length()) { index -> array.optString(index) }.filter { it.isNotBlank() }.toMutableList()
+    }
+
+    private fun writePlaceList(key: String, values: List<String>) {
+        val array = JSONArray()
+        values.distinct().take(12).forEach { array.put(it) }
+        savedPlaces().edit().putString(key, array.toString()).apply()
+    }
+
+    private fun saveFavoriteDestination() {
+        val destination = destinationInput.text.toString().trim()
+        if (destination.isBlank()) {
+            destinationInput.error = "Nejdříve zadej cíl"
+            return
+        }
+        val favorites = readPlaceList("favorites")
+        if (favorites.none { it.equals(destination, true) }) favorites.add(0, destination)
+        writePlaceList("favorites", favorites)
+        Toast.makeText(this, "Cíl uložený mezi oblíbené", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun rememberRecentDestination(destination: String) {
+        val recent = readPlaceList("recent")
+        recent.removeAll { it.equals(destination, true) }
+        recent.add(0, destination)
+        writePlaceList("recent", recent)
+    }
+
+    private fun showSavedPlaces() {
+        val favorites = readPlaceList("favorites")
+        val recent = readPlaceList("recent")
+        val all = (favorites.map { "★  $it" } + recent.filter { item -> favorites.none { it.equals(item, true) } }.map { "Nedávné: $it" })
+        if (all.isEmpty()) {
+            Toast.makeText(this, "Zatím nemáš uložená místa ani nedávné cíle.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Oblíbené a nedávné cíle")
+            .setItems(all.toTypedArray()) { _, which ->
+                val selected = all[which].removePrefix("★  ").removePrefix("Nedávné: ")
+                destinationInput.setText(selected)
+                destinationInput.setSelection(destinationInput.text.length)
+            }
+            .setNegativeButton("Zavřít", null)
+            .show()
+    }
+
     private fun addStopField() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -215,8 +279,7 @@ class NavigationActivity : Activity() {
         val userId = intent.getStringExtra("user_id")
         if (userId.isNullOrBlank()) {
             statusText.text = "Přihlas se a vyber vozidlo v nabídce Vozidla."
-            isRecalculating = forceCurrentStart
-        previewButton.isEnabled = false
+            previewButton.isEnabled = false
             return
         }
         FirebaseFirestore.getInstance().collection("users").document(userId).collection("vehicles")
@@ -300,6 +363,7 @@ class NavigationActivity : Activity() {
                 val route = requestTruckRoute(locations, preferMainRoads)
                 runOnUiThread {
                     routePoints = route.first
+                    rememberRecentDestination(destination)
                     routeSummary = route.second
                     maneuvers = route.third
                     currentManeuverIndex = 0
