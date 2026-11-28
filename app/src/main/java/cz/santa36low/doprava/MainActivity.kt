@@ -802,14 +802,6 @@ class MainActivity : ComponentActivity() {
                         )
                     )
                     NavigationBarItem(
-                        selected = page == 5,
-                        onClick = { page = 5 },
-                        icon = { Icon(Icons.Filled.Directions, contentDescription = "Navigace", modifier = Modifier.size(30.dp)) },
-                        label = { Text("Navigace") },
-                        colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
-                            indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
-                    )
-                    NavigationBarItem(
                         selected = page == 2,
                         onClick = { page = 2; refresh() },
                         icon = { Icon(Icons.Filled.ShowChart, contentDescription = "Graf přehledu", modifier = Modifier.size(30.dp)) },
@@ -817,7 +809,15 @@ class MainActivity : ComponentActivity() {
                         colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
                             indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
                     )
-                }
+
+                    NavigationBarItem(
+                        selected = page == 5,
+                        onClick = { page = 5 },
+                        icon = { Icon(Icons.Filled.Directions, contentDescription = "Navigace", modifier = Modifier.size(30.dp)) },
+                        label = { Text("Navigace") },
+                        colors = NavigationBarItemDefaults.colors(selectedIconColor = gold, selectedTextColor = gold,
+                            indicatorColor = Color(0xFF173F66), unselectedIconColor = Color.LightGray, unselectedTextColor = Color.LightGray)
+                    )                }
             }
         ) { padding ->
             Column(
