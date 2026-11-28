@@ -128,6 +128,10 @@ class NavigationActivity : Activity() {
             setOnClickListener { showSavedPlaces() }
         }, LinearLayout.LayoutParams(0, -2, 1f))
         panel.addView(placeActions)
+        panel.addView(Button(this).apply {
+            text = "Najít místa podél trasy"
+            setOnClickListener { searchPlacesAlongRoute() }
+        })
         stopsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         panel.addView(stopsContainer)
         panel.addView(Button(this).apply {
@@ -204,6 +208,111 @@ class NavigationActivity : Activity() {
         isSingleLine = true
         textSize = 15f
         setPadding(10, 7, 10, 7)
+    }
+
+    private data class NearbyPlace(val name: String, val category: String, val latitude: Double, val longitude: Double, val distanceMeters: Float)
+
+    private fun searchPlacesAlongRoute() {
+        val origin = currentLocation
+        if (origin == null && routePoints.isEmpty()) {
+            Toast.makeText(this, "Nejdříve zjisti polohu nebo naplánuj trasu.", Toast.LENGTH_LONG).show()
+            locateUser()
+            return
+        }
+        val reference = if (routePoints.isNotEmpty() && origin != null) {
+            routePoints.minByOrNull { point ->
+                val result = FloatArray(1)
+                Location.distanceBetween(origin.latitude, origin.longitude, point.latitude, point.longitude, result)
+                result[0]
+            } ?: LatLng(origin.latitude, origin.longitude)
+        } else if (origin != null) LatLng(origin.latitude, origin.longitude) else routePoints.first()
+        statusText.text = "Vyhledávám čerpací stanice, odpočívadla a parkoviště v okolí trasy…"
+        thread {
+            try {
+                val query = """
+                    [out:json][timeout:25];
+                    (
+                      node(around:3500,${reference.latitude},${reference.longitude})[amenity=fuel];
+                      way(around:3500,${reference.latitude},${reference.longitude})[amenity=fuel];
+                      node(around:3500,${reference.latitude},${reference.longitude})[amenity=parking];
+                      way(around:3500,${reference.latitude},${reference.longitude})[amenity=parking];
+                      node(around:3500,${reference.latitude},${reference.longitude})[highway=services];
+                      way(around:3500,${reference.latitude},${reference.longitude})[highway=services];
+                      node(around:3500,${reference.latitude},${reference.longitude})[amenity=restaurant];
+                      way(around:3500,${reference.latitude},${reference.longitude})[amenity=restaurant];
+                      node(around:3500,${reference.latitude},${reference.longitude})[hgv=yes];
+                      way(around:3500,${reference.latitude},${reference.longitude})[hgv=yes];
+                    );
+                    out center tags;
+                """.trimIndent()
+                val connection = URL("https://overpass-api.de/api/interpreter").openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.connectTimeout = 15000
+                connection.readTimeout = 35000
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+                connection.setRequestProperty("User-Agent", "Doprava-Android/1.0 (cz.santa36low.doprava)")
+                try {
+                    val payload = "data=" + URLEncoder.encode(query, "UTF-8")
+                    connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+                    val code = connection.responseCode
+                    val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                    val body = stream.bufferedReader().use { it.readText() }
+                    if (code !in 200..299) throw IllegalStateException("Vyhledávání míst vrátilo chybu $code.")
+                    val elements = JSONObject(body).optJSONArray("elements") ?: JSONArray()
+                    val places = ArrayList<NearbyPlace>()
+                    for (i in 0 until elements.length()) {
+                        val item = elements.getJSONObject(i)
+                        val tags = item.optJSONObject("tags") ?: JSONObject()
+                        val lat = if (item.has("lat")) item.optDouble("lat") else item.optJSONObject("center")?.optDouble("lat") ?: continue
+                        val lon = if (item.has("lon")) item.optDouble("lon") else item.optJSONObject("center")?.optDouble("lon") ?: continue
+                        val amenity = tags.optString("amenity")
+                        val category = when {
+                            amenity == "fuel" -> "Čerpací stanice"
+                            amenity == "parking" || tags.optString("hgv") == "yes" -> "Parkoviště / kamiony"
+                            tags.optString("highway") == "services" -> "Odpočívadlo"
+                            amenity == "restaurant" -> "Restaurace"
+                            else -> "Místo na trase"
+                        }
+                        val name = tags.optString("name").ifBlank { category }
+                        val distance = FloatArray(1)
+                        Location.distanceBetween(reference.latitude, reference.longitude, lat, lon, distance)
+                        places.add(NearbyPlace(name, category, lat, lon, distance[0]))
+                    }
+                    val sorted = places.distinctBy { "${it.latitude},${it.longitude}" }.sortedBy { it.distanceMeters }.take(30)
+                    runOnUiThread {
+                        statusText.text = if (sorted.isEmpty()) "V okolí nebyla nalezena žádná místa." else "Nalezeno míst: ${sorted.size}. Vyber místo a přidej ho jako zastávku."
+                        showNearbyPlaces(sorted)
+                    }
+                } finally { connection.disconnect() }
+            } catch (e: Exception) {
+                runOnUiThread { statusText.text = "Místa se nepodařilo načíst: ${e.message ?: "chyba"}" }
+            }
+        }
+    }
+
+    private fun showNearbyPlaces(places: List<NearbyPlace>) {
+        if (places.isEmpty()) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Místa podél trasy")
+                .setMessage("V okolí nebyla nalezena žádná místa. Zkus to znovu později.")
+                .setPositiveButton("Zavřít", null)
+                .show()
+            return
+        }
+        val labels = places.map { place ->
+            "${place.name}\n${place.category} • ${(place.distanceMeters / 1000f).let { "%.1f".format(java.util.Locale("cs", "CZ"), it) }} km"
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Místa v okolí – vyber zastávku")
+            .setItems(labels.toTypedArray()) { _, which ->
+                val place = places[which]
+                addStopField()
+                stopInputs.lastOrNull()?.setText("@${place.latitude},${place.longitude}")
+                Toast.makeText(this, "${place.name} přidáno jako zastávka. Znovu zobraz trasu.", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("Zavřít", null)
+            .show()
     }
 
     private fun savedPlaces() = getSharedPreferences("navigation_places", MODE_PRIVATE)
@@ -487,6 +596,13 @@ class NavigationActivity : Activity() {
     }
 
     private fun geocode(query: String): Pair<Double, Double> {
+        val coordinateMatch = Regex("^@?\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*$").matchEntire(query)
+        if (coordinateMatch != null) {
+            val lat = coordinateMatch.groupValues[1].toDouble()
+            val lon = coordinateMatch.groupValues[2].toDouble()
+            if (lat !in -90.0..90.0 || lon !in -180.0..180.0) throw IllegalArgumentException("Souřadnice jsou mimo rozsah.")
+            return lat to lon
+        }
         val encoded = URLEncoder.encode(query, "UTF-8")
         val connection = URL("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=$encoded").openConnection() as HttpURLConnection
         connection.connectTimeout = 15000
