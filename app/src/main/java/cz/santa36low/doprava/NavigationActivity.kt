@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -21,6 +22,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.firestore.FirebaseFirestore
+import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.MapLibre
 import org.maplibre.android.annotations.MarkerOptions
@@ -37,11 +39,15 @@ import kotlin.math.roundToInt
 
 class NavigationActivity : Activity() {
     private lateinit var mapView: MapView
+    private lateinit var startInput: EditText
     private lateinit var destinationInput: EditText
+    private lateinit var stopsContainer: LinearLayout
     private lateinit var statusText: TextView
-    private lateinit var routeButton: Button
+    private lateinit var previewButton: Button
+    private lateinit var navigateButton: Button
     private lateinit var routePreference: RadioGroup
     private lateinit var progress: ProgressBar
+    private val stopInputs = mutableListOf<EditText>()
     private var currentLocation: Location? = null
     private var vehicleHeight = 0.0
     private var vehicleWidth = 0.0
@@ -49,8 +55,8 @@ class NavigationActivity : Activity() {
     private var routePoints: List<LatLng> = emptyList()
     private var mapReady = false
     private var routeSummary = ""
-    // Default route style: prefer main roads.
     private var preferMainRoads = true
+    private var navigationStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,32 +78,47 @@ class NavigationActivity : Activity() {
     private fun buildLayout() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)
-            setPadding(12, 12, 12, 8)
+            setBackgroundColor(Color.rgb(241, 245, 249))
         }
-        val title = TextView(this).apply {
-            text = "Plánování trasy"
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16, 12, 16, 10)
+            setBackgroundColor(Color.WHITE)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(TextView(this).apply {
+            text = "Kamionová navigace"
             textSize = 21f
             setTextColor(Color.rgb(20, 54, 86))
-            setPadding(4, 4, 4, 8)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(Button(this).apply {
+            text = "Zavřít"
+            setOnClickListener { finish() }
+        })
+        panel.addView(header)
+        startInput = field("Odkud – prázdné = moje poloha")
+        panel.addView(startInput)
+        destinationInput = field("Kam chceš jet?")
+        panel.addView(destinationInput)
+        stopsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        panel.addView(stopsContainer)
+        panel.addView(Button(this).apply {
+            text = "+ Přidat zastávku"
+            setOnClickListener { addStopField() }
+        })
+        val optionsLabel = TextView(this).apply {
+            text = "Typ trasy"
+            textSize = 13f
+            setTextColor(Color.rgb(70, 85, 100))
+            setPadding(2, 6, 2, 0)
         }
-        root.addView(title)
-        destinationInput = EditText(this).apply {
-            hint = "Zadej cílové místo nebo adresu"
-            isSingleLine = true
-            textSize = 16f
-        }
-        root.addView(destinationInput, LinearLayout.LayoutParams(-1, -2))
-        val preferenceTitle = TextView(this).apply {
-            text = "Možnosti trasy"
-            textSize = 14f
-            setTextColor(Color.rgb(20, 54, 86))
-            setPadding(4, 8, 4, 2)
-        }
-        root.addView(preferenceTitle)
+        panel.addView(optionsLabel)
         routePreference = RadioGroup(this).apply {
             orientation = RadioGroup.VERTICAL
-            val mainRoads = RadioButton(this@NavigationActivity).apply {
+            val main = RadioButton(this@NavigationActivity).apply {
                 id = View.generateViewId()
                 text = "Upřednostňovat hlavní komunikace"
                 isChecked = true
@@ -106,42 +127,75 @@ class NavigationActivity : Activity() {
                 id = View.generateViewId()
                 text = "Vyvážená trasa"
             }
-            addView(mainRoads)
+            addView(main)
             addView(balanced)
-            setOnCheckedChangeListener { group, checkedId ->
-                preferMainRoads = checkedId == mainRoads.id
-            }
+            setOnCheckedChangeListener { _, checked -> preferMainRoads = checked == main.id }
         }
-        root.addView(routePreference)
+        panel.addView(routePreference)
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        routeButton = Button(this).apply {
-            text = "Vypočítat trasu"
+        previewButton = Button(this).apply {
+            text = "Zobrazit trasu"
             setOnClickListener { calculateRoute() }
         }
-        actions.addView(routeButton, LinearLayout.LayoutParams(0, -2, 1f))
+        actions.addView(previewButton, LinearLayout.LayoutParams(0, -2, 1f))
         progress = ProgressBar(this).apply { visibility = View.GONE }
-        actions.addView(progress, LinearLayout.LayoutParams(48, 48))
-        root.addView(actions)
-        statusText = TextView(this).apply {
-            text = "Načítám vybrané vozidlo a aktuální polohu…"
-            textSize = 13f
-            setTextColor(Color.DKGRAY)
-            setPadding(4, 4, 4, 8)
+        actions.addView(progress, LinearLayout.LayoutParams(44, 44))
+        panel.addView(actions)
+        navigateButton = Button(this).apply {
+            text = "Navigovat"
+            isEnabled = false
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(22, 145, 85))
+            setOnClickListener { startNavigationMode() }
         }
-        root.addView(statusText)
+        panel.addView(navigateButton, LinearLayout.LayoutParams(-1, -2))
+        statusText = TextView(this).apply {
+            text = "Zjišťuji polohu a načítám parametry vybraného vozidla…"
+            textSize = 12f
+            setTextColor(Color.DKGRAY)
+            setPadding(3, 5, 3, 2)
+        }
+        panel.addView(statusText)
+        val scroll = ScrollView(this).apply { isFillViewport = false; addView(panel) }
+        root.addView(scroll, LinearLayout.LayoutParams(-1, -2))
         mapView = MapView(this)
         root.addView(mapView, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+    }
+
+    private fun field(hintText: String) = EditText(this).apply {
+        hint = hintText
+        isSingleLine = true
+        textSize = 15f
+        setPadding(10, 7, 10, 7)
+    }
+
+    private fun addStopField() {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val input = field("Zastávka")
+        row.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(Button(this).apply {
+            text = "×"
+            setOnClickListener {
+                stopInputs.remove(input)
+                stopsContainer.removeView(row)
+            }
+        })
+        stopInputs.add(input)
+        stopsContainer.addView(row)
     }
 
     private fun loadSelectedVehicle() {
         val userId = intent.getStringExtra("user_id")
         if (userId.isNullOrBlank()) {
             statusText.text = "Přihlas se a vyber vozidlo v nabídce Vozidla."
-            routeButton.isEnabled = false
+            previewButton.isEnabled = false
             return
         }
         FirebaseFirestore.getInstance().collection("users").document(userId).collection("vehicles")
@@ -150,7 +204,7 @@ class NavigationActivity : Activity() {
                 val doc = result.documents.firstOrNull()
                 if (doc == null) {
                     statusText.text = "Nejdříve přidej a vyber vozidlo v nabídce Vozidla."
-                    routeButton.isEnabled = false
+                    previewButton.isEnabled = false
                     return@addOnSuccessListener
                 }
                 vehicleHeight = doc.getDouble("heightMeters") ?: 0.0
@@ -159,22 +213,22 @@ class NavigationActivity : Activity() {
                 val plate = doc.getString("plate").orEmpty()
                 if (vehicleHeight <= 0 || vehicleWidth <= 0 || vehicleWeight <= 0) {
                     statusText.text = "Vozidlo $plate: doplň hmotnost, výšku a šířku v nabídce Vozidla."
-                    routeButton.isEnabled = false
+                    previewButton.isEnabled = false
                 } else {
                     statusText.text = "Vozidlo $plate • ${vehicleWeight} t • výška ${vehicleHeight} m • šířka ${vehicleWidth} m"
-                    routeButton.isEnabled = true
+                    previewButton.isEnabled = true
                 }
             }
             .addOnFailureListener { error ->
                 statusText.text = "Vozidlo se nepodařilo načíst: ${error.localizedMessage ?: "chyba"}"
-                routeButton.isEnabled = false
+                previewButton.isEnabled = false
             }
     }
 
     private fun locateUser() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            statusText.text = "Aplikace nemá povolený přístup k poloze. Povol ho v nastavení telefonu."
+            statusText.text = "Povol aplikaci přístup k poloze v nastavení telefonu."
             return
         }
         val client = LocationServices.getFusedLocationProviderClient(this)
@@ -184,12 +238,13 @@ class NavigationActivity : Activity() {
                 if (location != null) {
                     currentLocation = location
                     if (mapReady) mapView.getMapAsync { it.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 13.0)) }
-                    if (statusText.text.toString().startsWith("Načítám")) statusText.text = "Poloha připravena. Zadej cíl a vypočítej trasu."
+                    if (startInput.text.isNullOrBlank()) startInput.hint = "Odkud – moje poloha"
+                    if (statusText.text.toString().startsWith("Zjišťuji")) statusText.text = "Poloha připravena. Zadej cíl a zobraz náhled trasy."
                 } else {
                     client.lastLocation.addOnSuccessListener { last ->
                         currentLocation = last
                         if (last == null) statusText.text = "Nepodařilo se získat polohu. Zkontroluj GPS."
-                        else statusText.text = "Poloha připravena. Zadej cíl a vypočítej trasu."
+                        else if (statusText.text.toString().startsWith("Zjišťuji")) statusText.text = "Poloha připravena. Zadej cíl a zobraz náhled trasy."
                     }
                 }
             }
@@ -197,13 +252,7 @@ class NavigationActivity : Activity() {
     }
 
     private fun calculateRoute() {
-        val origin = currentLocation
         val destination = destinationInput.text.toString().trim()
-        if (origin == null) {
-            Toast.makeText(this, "Nejdříve počkej na zjištění aktuální polohy.", Toast.LENGTH_LONG).show()
-            locateUser()
-            return
-        }
         if (destination.isBlank()) {
             destinationInput.error = "Zadej cíl cesty"
             return
@@ -212,58 +261,83 @@ class NavigationActivity : Activity() {
             statusText.text = "Nejdříve doplň parametry vybraného vozidla."
             return
         }
-        routeButton.isEnabled = false
+        val startText = startInput.text.toString().trim()
+        val stopTexts = stopInputs.map { it.text.toString().trim() }.filter { it.isNotBlank() }
+        previewButton.isEnabled = false
+        navigateButton.isEnabled = false
         progress.visibility = View.VISIBLE
-        statusText.text = "Vyhledávám cíl a počítám trasu pro nákladní vozidlo…"
+        statusText.text = "Vyhledávám místa a plánuji trasu pro vybrané nákladní vozidlo…"
         thread {
             try {
-                val target = geocode(destination)
-                val route = requestTruckRoute(origin.latitude, origin.longitude, target.first, target.second, preferMainRoads)
+                val locations = ArrayList<Pair<Double, Double>>()
+                locations.add(if (startText.isBlank() || startText.equals("moje poloha", true)) {
+                    val loc = currentLocation ?: throw IllegalStateException("Aktuální poloha není dostupná. Zadej start ručně.")
+                    loc.latitude to loc.longitude
+                } else geocode(startText))
+                stopTexts.forEach { locations.add(geocode(it)) }
+                locations.add(geocode(destination))
+                val route = requestTruckRoute(locations, preferMainRoads)
                 runOnUiThread {
                     routePoints = route.first
                     routeSummary = route.second
-                    statusText.text = routeSummary
-                    routeButton.isEnabled = true
+                    navigationStarted = false
+                    statusText.text = routeSummary + " • Zkontroluj trasu a stiskni Navigovat."
+                    previewButton.isEnabled = true
+                    navigateButton.isEnabled = true
+                    navigateButton.text = "Navigovat"
                     progress.visibility = View.GONE
                     if (mapReady) drawRoute()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     statusText.text = "Trasu se nepodařilo vypočítat: ${e.message ?: "neznámá chyba"}"
-                    routeButton.isEnabled = true
+                    previewButton.isEnabled = true
                     progress.visibility = View.GONE
                 }
             }
         }
     }
 
+    private fun startNavigationMode() {
+        if (routePoints.isEmpty()) return
+        navigationStarted = true
+        navigateButton.text = "Navigace spuštěna"
+        navigateButton.isEnabled = false
+        statusText.text = "Trasa je připravena. Živé navádění krok za krokem a hlasové pokyny budou doplněny v další fázi."
+        currentLocation?.let { location ->
+            mapView.getMapAsync { map ->
+                map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 16.0))
+            }
+        }
+    }
+
     private fun geocode(query: String): Pair<Double, Double> {
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val connection = (URL("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=$encoded").openConnection() as HttpURLConnection)
+        val connection = URL("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=$encoded").openConnection() as HttpURLConnection
         connection.connectTimeout = 15000
         connection.readTimeout = 15000
         connection.setRequestProperty("User-Agent", "Doprava-Android/1.0 (cz.santa36low.doprava)")
         try {
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val result = org.json.JSONArray(body)
-            if (result.length() == 0) throw IllegalStateException("Cíl se nepodařilo najít. Zkus přesnější adresu.")
+            val result = JSONArray(body)
+            if (result.length() == 0) throw IllegalStateException("Místo nebylo nalezeno: $query")
             val item = result.getJSONObject(0)
             return item.getString("lat").toDouble() to item.getString("lon").toDouble()
         } finally { connection.disconnect() }
     }
 
-    private fun requestTruckRoute(startLat: Double, startLon: Double, endLat: Double, endLon: Double, preferMainRoads: Boolean): Pair<List<LatLng>, String> {
-        val connection = (URL("https://valhalla1.openstreetmap.de/route").openConnection() as HttpURLConnection)
+    private fun requestTruckRoute(locations: List<Pair<Double, Double>>, preferMainRoads: Boolean): Pair<List<LatLng>, String> {
+        val connection = URL("https://valhalla1.openstreetmap.de/route").openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.doOutput = true
         connection.connectTimeout = 20000
         connection.readTimeout = 30000
         connection.setRequestProperty("Content-Type", "application/json")
         connection.setRequestProperty("User-Agent", "Doprava-Android/1.0 (cz.santa36low.doprava)")
-        connection.setRequestProperty("X-Client-Id", "cz.santa36low.doprava")
+        val stops = JSONArray()
+        locations.forEach { (lat, lon) -> stops.put(JSONObject().put("lat", lat).put("lon", lon)) }
         val request = JSONObject().apply {
-            put("locations", org.json.JSONArray().put(JSONObject().put("lat", startLat).put("lon", startLon))
-                .put(JSONObject().put("lat", endLat).put("lon", endLon)))
+            put("locations", stops)
             put("costing", "truck")
             put("units", "kilometers")
             put("language", "cs-CZ")
@@ -276,19 +350,22 @@ class NavigationActivity : Activity() {
         }
         try {
             connection.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
-            val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val body = stream.bufferedReader().use { it.readText() }
-            if (connection.responseCode !in 200..299) throw IllegalStateException("Směrovací služba vrátila chybu ${connection.responseCode}: ${body.take(220)}")
+            if (code !in 200..299) throw IllegalStateException("Směrovací služba vrátila chybu $code: ${body.take(220)}")
             val json = JSONObject(body)
             val trip = json.optJSONObject("trip") ?: throw IllegalStateException(json.optJSONObject("error")?.optString("message") ?: "Trasa nebyla nalezena.")
             val legs = trip.getJSONArray("legs")
-            val shape = legs.getJSONObject(0).getString("shape")
-            val points = decodePolyline6(shape)
+            val points = ArrayList<LatLng>()
+            for (i in 0 until legs.length()) {
+                points.addAll(decodePolyline6(legs.getJSONObject(i).getString("shape")))
+            }
             if (points.size < 2) throw IllegalStateException("Směrovací služba nevrátila použitelnou trasu.")
             val summary = trip.getJSONObject("summary")
             val km = summary.optDouble("length", 0.0)
             val minutes = (summary.optDouble("time", 0.0) / 60.0).roundToInt()
-            return points to "Trasa: ${"%.1f".format(java.util.Locale("cs", "CZ"), km)} km • přibližně ${minutes} min"
+            return points to "Trasa: ${"%.1f".format(java.util.Locale("cs", "CZ"), km)} km • přibližně $minutes min • ${locations.size - 2} zastávek"
         } finally { connection.disconnect() }
     }
 
@@ -324,7 +401,7 @@ class NavigationActivity : Activity() {
         if (!mapReady || routePoints.isEmpty()) return
         mapView.getMapAsync { map ->
             map.clear()
-            map.addPolyline(PolylineOptions().addAll(routePoints).color(Color.rgb(20, 105, 180)).width(6f))
+            map.addPolyline(PolylineOptions().addAll(routePoints).color(Color.rgb(20, 105, 180)).width(7f))
             map.addMarker(MarkerOptions().position(routePoints.first()).title("Start"))
             map.addMarker(MarkerOptions().position(routePoints.last()).title("Cíl"))
             val bounds = LatLngBounds.Builder()
