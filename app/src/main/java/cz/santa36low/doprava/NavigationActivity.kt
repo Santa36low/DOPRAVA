@@ -19,6 +19,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import android.os.Looper
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.firestore.FirebaseFirestore
@@ -38,6 +42,8 @@ import kotlin.concurrent.thread
 import kotlin.math.roundToInt
 
 class NavigationActivity : Activity() {
+    private data class NavManeuver(val instruction: String, val endPointIndex: Int)
+
     private lateinit var mapView: MapView
     private lateinit var startInput: EditText
     private lateinit var destinationInput: EditText
@@ -47,6 +53,7 @@ class NavigationActivity : Activity() {
     private lateinit var navigateButton: Button
     private lateinit var routePreference: RadioGroup
     private lateinit var progress: ProgressBar
+    private lateinit var guidanceText: TextView
     private val stopInputs = mutableListOf<EditText>()
     private var currentLocation: Location? = null
     private var vehicleHeight = 0.0
@@ -57,6 +64,11 @@ class NavigationActivity : Activity() {
     private var routeSummary = ""
     private var preferMainRoads = true
     private var navigationStarted = false
+    private var maneuvers: List<NavManeuver> = emptyList()
+    private var isRecalculating = false
+    private var lastRerouteAt = 0L
+    private var currentManeuverIndex = 0
+    private var locationCallback: LocationCallback? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -159,6 +171,14 @@ class NavigationActivity : Activity() {
             setPadding(3, 5, 3, 2)
         }
         panel.addView(statusText)
+        guidanceText = TextView(this).apply {
+            text = "Po výpočtu trasy se zde zobrazí pokyny k jízdě."
+            textSize = 17f
+            setTextColor(Color.rgb(20, 54, 86))
+            setPadding(8, 10, 8, 10)
+            setBackgroundColor(Color.rgb(232, 240, 248))
+        }
+        panel.addView(guidanceText)
         val scroll = ScrollView(this).apply { isFillViewport = false; addView(panel) }
         root.addView(scroll, LinearLayout.LayoutParams(-1, -2))
         mapView = MapView(this)
@@ -195,7 +215,8 @@ class NavigationActivity : Activity() {
         val userId = intent.getStringExtra("user_id")
         if (userId.isNullOrBlank()) {
             statusText.text = "Přihlas se a vyber vozidlo v nabídce Vozidla."
-            previewButton.isEnabled = false
+            isRecalculating = forceCurrentStart
+        previewButton.isEnabled = false
             return
         }
         FirebaseFirestore.getInstance().collection("users").document(userId).collection("vehicles")
@@ -251,7 +272,7 @@ class NavigationActivity : Activity() {
             .addOnFailureListener { error -> statusText.text = "Poloha není dostupná: ${error.localizedMessage ?: "chyba"}" }
     }
 
-    private fun calculateRoute() {
+    private fun calculateRoute(forceCurrentStart: Boolean = false) {
         val destination = destinationInput.text.toString().trim()
         if (destination.isBlank()) {
             destinationInput.error = "Zadej cíl cesty"
@@ -261,7 +282,7 @@ class NavigationActivity : Activity() {
             statusText.text = "Nejdříve doplň parametry vybraného vozidla."
             return
         }
-        val startText = startInput.text.toString().trim()
+        val startText = if (forceCurrentStart) "" else startInput.text.toString().trim()
         val stopTexts = stopInputs.map { it.text.toString().trim() }.filter { it.isNotBlank() }
         previewButton.isEnabled = false
         navigateButton.isEnabled = false
@@ -280,16 +301,20 @@ class NavigationActivity : Activity() {
                 runOnUiThread {
                     routePoints = route.first
                     routeSummary = route.second
-                    navigationStarted = false
-                    statusText.text = routeSummary + " • Zkontroluj trasu a stiskni Navigovat."
+                    maneuvers = route.third
+                    currentManeuverIndex = 0
+                    if (!forceCurrentStart) navigationStarted = false
+                    isRecalculating = false
+                    statusText.text = if (forceCurrentStart && navigationStarted) "Trasa byla automaticky přepočítána." else routeSummary + " • Zkontroluj trasu a stiskni Navigovat."
                     previewButton.isEnabled = true
                     navigateButton.isEnabled = true
-                    navigateButton.text = "Navigovat"
+                    navigateButton.text = if (navigationStarted) "Ukončit navigaci" else "Navigovat"
                     progress.visibility = View.GONE
                     if (mapReady) drawRoute()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
+                    isRecalculating = false
                     statusText.text = "Trasu se nepodařilo vypočítat: ${e.message ?: "neznámá chyba"}"
                     previewButton.isEnabled = true
                     progress.visibility = View.GONE
@@ -301,13 +326,99 @@ class NavigationActivity : Activity() {
     private fun startNavigationMode() {
         if (routePoints.isEmpty()) return
         navigationStarted = true
-        navigateButton.text = "Navigace spuštěna"
-        navigateButton.isEnabled = false
-        statusText.text = "Trasa je připravena. Živé navádění krok za krokem a hlasové pokyny budou doplněny v další fázi."
-        currentLocation?.let { location ->
-            mapView.getMapAsync { map ->
-                map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 16.0))
+        navigateButton.text = "Ukončit navigaci"
+        navigateButton.isEnabled = true
+        navigateButton.setOnClickListener {
+            stopNavigationUpdates()
+            navigationStarted = false
+            navigateButton.text = "Navigovat"
+            navigateButton.isEnabled = true
+            guidanceText.text = "Navigace byla ukončena."
+            statusText.text = routeSummary
+        }
+        statusText.text = "Navigace je aktivní • sleduji tvoji polohu a trasu."
+        updateGuidance(currentLocation)
+        startNavigationUpdates()
+    }
+
+    private fun startNavigationUpdates() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            statusText.text = "Pro navigování povol přístup k poloze."
+            return
+        }
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2500L)
+            .setMinUpdateDistanceMeters(5f)
+            .build()
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                val location = result.lastLocation ?: return
+                currentLocation = location
+                if (!navigationStarted || routePoints.isEmpty()) return
+                updateGuidance(location)
+                val distanceToRoute = distanceToRouteMeters(location)
+                val now = System.currentTimeMillis()
+                if (distanceToRoute > 100f && !isRecalculating && now - lastRerouteAt > 15000L) {
+                    lastRerouteAt = now
+                    isRecalculating = true
+                    statusText.text = "Jsi mimo trasu (${distanceToRoute.roundToInt()} m). Přepočítávám…"
+                    calculateRoute(forceCurrentStart = true)
+                }
+                if (mapReady) mapView.getMapAsync { map ->
+                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 16.5))
+                }
             }
+        }
+        LocationServices.getFusedLocationProviderClient(this)
+            .requestLocationUpdates(request, locationCallback!!, Looper.getMainLooper())
+    }
+
+    private fun stopNavigationUpdates() {
+        locationCallback?.let { LocationServices.getFusedLocationProviderClient(this).removeLocationUpdates(it) }
+        locationCallback = null
+    }
+
+    private fun distanceToRouteMeters(location: Location): Float {
+        var best = Float.MAX_VALUE
+        routePoints.forEach { point ->
+            val result = FloatArray(1)
+            Location.distanceBetween(location.latitude, location.longitude, point.latitude, point.longitude, result)
+            if (result[0] < best) best = result[0]
+        }
+        return best
+    }
+
+    private fun updateGuidance(location: Location?) {
+        if (location == null || routePoints.isEmpty()) return
+        var nearestIndex = 0
+        var nearestDistance = Float.MAX_VALUE
+        routePoints.forEachIndexed { index, point ->
+            val result = FloatArray(1)
+            Location.distanceBetween(location.latitude, location.longitude, point.latitude, point.longitude, result)
+            if (result[0] < nearestDistance) {
+                nearestDistance = result[0]
+                nearestIndex = index
+            }
+        }
+        while (currentManeuverIndex < maneuvers.lastIndex &&
+            nearestIndex > maneuvers[currentManeuverIndex].endPointIndex) currentManeuverIndex++
+        val next = maneuvers.getOrNull(currentManeuverIndex)
+        guidanceText.text = if (next != null) {
+            "DALŠÍ POKYN\n${next.instruction}\n\nVzdálenost od trasy: ${nearestDistance.roundToInt()} m"
+        } else {
+            "Pokračuj po trase k cíli.\nVzdálenost od trasy: ${nearestDistance.roundToInt()} m"
+        }
+        val destination = routePoints.last()
+        val destinationDistance = FloatArray(1)
+        Location.distanceBetween(location.latitude, location.longitude, destination.latitude, destination.longitude, destinationDistance)
+        if (destinationDistance[0] < 45f) {
+            guidanceText.text = "DORAZIL JSI DO CÍLE"
+            statusText.text = "Cíl dosažen."
+            stopNavigationUpdates()
+            navigationStarted = false
+            navigateButton.text = "Navigovat znovu"
+            navigateButton.isEnabled = true
+            navigateButton.setOnClickListener { startNavigationMode() }
         }
     }
 
@@ -326,7 +437,7 @@ class NavigationActivity : Activity() {
         } finally { connection.disconnect() }
     }
 
-    private fun requestTruckRoute(locations: List<Pair<Double, Double>>, preferMainRoads: Boolean): Pair<List<LatLng>, String> {
+    private fun requestTruckRoute(locations: List<Pair<Double, Double>>, preferMainRoads: Boolean): Triple<List<LatLng>, String, List<NavManeuver>> {
         val connection = URL("https://valhalla1.openstreetmap.de/route").openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.doOutput = true
@@ -358,14 +469,26 @@ class NavigationActivity : Activity() {
             val trip = json.optJSONObject("trip") ?: throw IllegalStateException(json.optJSONObject("error")?.optString("message") ?: "Trasa nebyla nalezena.")
             val legs = trip.getJSONArray("legs")
             val points = ArrayList<LatLng>()
+            val parsedManeuvers = ArrayList<NavManeuver>()
+            var pointOffset = 0
             for (i in 0 until legs.length()) {
-                points.addAll(decodePolyline6(legs.getJSONObject(i).getString("shape")))
+                val leg = legs.getJSONObject(i)
+                val legPoints = decodePolyline6(leg.getString("shape"))
+                points.addAll(legPoints)
+                val steps = leg.optJSONArray("maneuvers") ?: JSONArray()
+                for (j in 0 until steps.length()) {
+                    val step = steps.getJSONObject(j)
+                    val instruction = step.optString("instruction").ifBlank { "Pokračuj podle trasy" }
+                    val endIndex = pointOffset + step.optInt("end_shape_index", legPoints.lastIndex)
+                    parsedManeuvers.add(NavManeuver(instruction, endIndex.coerceAtLeast(0)))
+                }
+                pointOffset += legPoints.size
             }
             if (points.size < 2) throw IllegalStateException("Směrovací služba nevrátila použitelnou trasu.")
             val summary = trip.getJSONObject("summary")
             val km = summary.optDouble("length", 0.0)
             val minutes = (summary.optDouble("time", 0.0) / 60.0).roundToInt()
-            return points to "Trasa: ${"%.1f".format(java.util.Locale("cs", "CZ"), km)} km • přibližně $minutes min • ${locations.size - 2} zastávek"
+            return Triple(points, "Trasa: ${"%.1f".format(java.util.Locale("cs", "CZ"), km)} km • přibližně $minutes min • ${locations.size - 2} zastávek", parsedManeuvers)
         } finally { connection.disconnect() }
     }
 
@@ -416,5 +539,5 @@ class NavigationActivity : Activity() {
     override fun onStop() { if (::mapView.isInitialized) mapView.onStop(); super.onStop() }
     override fun onLowMemory() { super.onLowMemory(); if (::mapView.isInitialized) mapView.onLowMemory() }
     override fun onSaveInstanceState(outState: Bundle) { if (::mapView.isInitialized) mapView.onSaveInstanceState(outState); super.onSaveInstanceState(outState) }
-    override fun onDestroy() { if (::mapView.isInitialized) mapView.onDestroy(); super.onDestroy() }
+    override fun onDestroy() { stopNavigationUpdates(); if (::mapView.isInitialized) mapView.onDestroy(); super.onDestroy() }
 }
