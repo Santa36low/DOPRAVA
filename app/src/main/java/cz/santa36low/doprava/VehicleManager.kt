@@ -15,6 +15,9 @@ private data class DriverVehicle(
     val kind: String,
     val type: String,
     val plate: String,
+    val weightTons: Double,
+    val heightMeters: Double,
+    val widthMeters: Double,
     val selected: Boolean
 )
 
@@ -29,6 +32,9 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
     var kind by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("") }
     var plate by remember { mutableStateOf("") }
+    var weightTons by remember { mutableStateOf("") }
+    var heightMeters by remember { mutableStateOf("") }
+    var widthMeters by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf<DriverVehicle?>(null) }
 
     val collection = remember(userId) {
@@ -46,6 +52,9 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                         doc.getString("kind").orEmpty(),
                         doc.getString("type").orEmpty(),
                         doc.getString("plate").orEmpty(),
+                        doc.getDouble("weightTons") ?: 0.0,
+                        doc.getDouble("heightMeters") ?: 0.0,
+                        doc.getDouble("widthMeters") ?: 0.0,
                         doc.getBoolean("selected") == true
                     )
                 }.sortedBy { it.plate }
@@ -96,6 +105,9 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
             kind = ""
             type = ""
             plate = ""
+            weightTons = ""
+            heightMeters = ""
+            widthMeters = ""
             dialogOpen = true
         }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = blue)) {
             Text("Přidat vozidlo")
@@ -132,6 +144,11 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                         }
                         Text("Druh: ${vehicle.kind}")
                         Text("Typ: ${vehicle.type}")
+                        if (vehicle.weightTons > 0 || vehicle.heightMeters > 0 || vehicle.widthMeters > 0) {
+                            Text("Hmotnost: ${if (vehicle.weightTons > 0) vehicle.weightTons.toString() + " t" else "—"}  •  Výška: ${if (vehicle.heightMeters > 0) vehicle.heightMeters.toString() + " m" else "—"}  •  Šířka: ${if (vehicle.widthMeters > 0) vehicle.widthMeters.toString() + " m" else "—"}")
+                        } else {
+                            Text("Rozměry pro navigaci zatím nejsou vyplněné.")
+                        }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             if (!vehicle.selected) {
                                 TextButton(onClick = { selectVehicle(vehicle) }) {
@@ -143,6 +160,9 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                                 kind = vehicle.kind
                                 type = vehicle.type
                                 plate = vehicle.plate
+                                weightTons = if (vehicle.weightTons > 0) vehicle.weightTons.toString() else ""
+                                heightMeters = if (vehicle.heightMeters > 0) vehicle.heightMeters.toString() else ""
+                                widthMeters = if (vehicle.widthMeters > 0) vehicle.widthMeters.toString() else ""
                                 dialogOpen = true
                             }) { Text("Upravit") }
                             Spacer(Modifier.weight(1f))
@@ -167,6 +187,10 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                     OutlinedTextField(value = kind, onValueChange = { kind = it }, label = { Text("Druh vozidla") }, singleLine = true)
                     OutlinedTextField(value = type, onValueChange = { type = it }, label = { Text("Typ vozidla") }, singleLine = true)
                     OutlinedTextField(value = plate, onValueChange = { plate = it.uppercase() }, label = { Text("SPZ") }, singleLine = true)
+                    Text("Rozměry a hmotnost pro plánování tras", style = MaterialTheme.typography.labelLarge)
+                    OutlinedTextField(value = weightTons, onValueChange = { weightTons = it.replace(',', '.') }, label = { Text("Hmotnost vozidla (t)") }, singleLine = true)
+                    OutlinedTextField(value = heightMeters, onValueChange = { heightMeters = it.replace(',', '.') }, label = { Text("Výška (m)") }, singleLine = true)
+                    OutlinedTextField(value = widthMeters, onValueChange = { widthMeters = it.replace(',', '.') }, label = { Text("Šířka (m)") }, singleLine = true)
                 }
             },
             confirmButton = {
@@ -179,6 +203,9 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                         "kind" to kind.trim(),
                         "type" to type.trim(),
                         "plate" to plate.trim().uppercase(),
+                        "weightTons" to (weightTons.toDoubleOrNull() ?: 0.0),
+                        "heightMeters" to (heightMeters.toDoubleOrNull() ?: 0.0),
+                        "widthMeters" to (widthMeters.toDoubleOrNull() ?: 0.0),
                         "selected" to shouldSelect
                     )
                     dialogOpen = false
@@ -192,6 +219,9 @@ fun VehicleManagerScreen(userId: String?, navy: Color, blue: Color) {
                                 kind = kind.trim(),
                                 type = type.trim(),
                                 plate = plate.trim().uppercase(),
+                                weightTons = weightTons.toDoubleOrNull() ?: 0.0,
+                                heightMeters = heightMeters.toDoubleOrNull() ?: 0.0,
+                                widthMeters = widthMeters.toDoubleOrNull() ?: 0.0,
                                 selected = shouldSelect
                             )
                             vehicles = (vehicles.filterNot { it.id == id } + savedVehicle).sortedBy { it.plate }
